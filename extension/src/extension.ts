@@ -7,7 +7,7 @@
 import * as path from 'path';
 
 import { workspace, ExtensionContext, TextDocument, Range, InlayHint } from 'vscode';
-import { LanguageClient, LanguageClientOptions, ServerOptions, Definition, TransportKind, Diagnostic, RequestType, ExecuteCommandRequest, ExecuteCommandParams, ExecuteCommandRegistrationOptions, TextDocumentPositionParams, ImplementationRequest, TypeDefinitionRequest, TextDocumentItem } from 'vscode-languageclient/node';
+import { LanguageClient, LanguageClientOptions, ServerOptions, Definition, TransportKind, Diagnostic, RequestType, ExecuteCommandRequest, ExecuteCommandParams, ExecuteCommandRegistrationOptions, TextDocumentPositionParams, ImplementationRequest, TypeDefinitionRequest, TextDocumentItem, NotificationType0 } from 'vscode-languageclient/node';
 
 import * as vscode from 'vscode';
 import { WorkspaceFolder, DebugConfiguration, ProviderResult, CancellationToken } from 'vscode';
@@ -50,6 +50,19 @@ export function activate(context: ExtensionContext) {
     // Create the language client and start the client.
     let client = new LanguageClient('angelscriptLanguageServer', 'Angelscript Language Server', serverOptions, clientOptions)
     let started_client = client.start();
+
+    client.onNotification(new NotificationType0("unreal-started"), () => {
+        const config = vscode.workspace.getConfiguration("UnrealAngelscript");
+        const workspacePath = config.get<string>("autoAttachWorkspaceFolder");
+        if (workspacePath !== "") {
+            const uri = vscode.Uri.from({
+                scheme: "file",
+                path: workspacePath
+            });
+            const Workspace = vscode.workspace.getWorkspaceFolder(uri);
+            vscode.debug.startDebugging(Workspace, "Debug Angelscript");
+        }
+    });
 
     client.onNotification("angelscript/wantSave", (uri : string) => {
         setTimeout(() => vscode.workspace.saveAll(), 100);

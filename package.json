@@ -209,6 +209,11 @@
                     "default": false,
                     "description": "Should project code generation be enabled? If not, only built-in code generation will be applied."
                 },
+                "UnrealAngelscript.autoAttachWorkspaceFolder": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Path to an Unreal folder that has a .vscode/launch.json with a 'Debug Angelscript' launch config. When specified, this launch config will be automatically ran when a connection with Unreal is made."
+                },
                 "UnrealAngelscript.projectCodeGeneration.generators": {
                     "type": "array",
                     "default": [],

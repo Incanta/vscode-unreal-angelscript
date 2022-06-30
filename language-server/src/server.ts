@@ -22,6 +22,7 @@ import {
     WorkspaceSymbol, DocumentSymbol,
     InlayHint, InlayHintParams,
     InlineValue, InlineValueParams,
+    NotificationType0,
 } from 'vscode-languageserver/node';
 import { TextDocument, TextDocumentContentChangeEvent } from 'vscode-languageserver-textdocument';
 
@@ -276,6 +277,8 @@ function connect_unreal()
 
             unreal.write(reqDb);
         }, 1000);
+
+        connection.sendNotification(new NotificationType0("unreal-started"));
     });
 }
 
