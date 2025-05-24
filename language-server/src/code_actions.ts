@@ -258,6 +258,8 @@ function AddGenerateDelegateFunctionActions(context : CodeActionContext)
                     delegate: data.delegate,
                     name: data.name,
                     position: diag.range.start,
+                    wildcardType: data.wildcardType,
+                    wildcardName: data.wildcardName,
                 }
             });
 
@@ -303,6 +305,18 @@ function AddGenerateDelegateFunctionActions(context : CodeActionContext)
             if (foundFunc && foundFunc instanceof typedb.DBMethod)
                 continue;
 
+            let wildcardType : string = null;
+            let wildcardName : string = null;
+            if (delegateBind.node_wildcard && delegateBind.wildcard_name)
+            {
+                let providedWildcardType = scriptfiles.ResolveTypeFromExpression(delegateBind.scope, delegateBind.node_wildcard);
+                if (providedWildcardType)
+                {
+                    wildcardType = providedWildcardType.name;
+                    wildcardName = delegateBind.wildcard_name;
+                }
+            }
+
             context.actions.push(<CodeAction> {
                 kind: CodeActionKind.QuickFix,
                 title: "Generate Method: "+funcName+"()",
@@ -314,6 +328,8 @@ function AddGenerateDelegateFunctionActions(context : CodeActionContext)
                     delegate: delegateBind.delegateType,
                     name: funcName,
                     position: context.module.getPosition(delegateBind.statement.start_offset + delegateBind.node_expression.start),
+                    wildcardType: wildcardType,
+                    wildcardName: wildcardName,
                 }
             });
         }
@@ -326,10 +342,43 @@ function ResolveGenerateDelegateFunctionAction(asmodule : scriptfiles.ASModule, 
     if (!delegateType)
         return;
 
-    let [insertPosition, indent, prefix, suffix] = FindInsertPositionForGeneratedMethod(asmodule, data.position);
+    let [insertPosition, indent, prefix, suffix] = FindInsertPositionForGeneratedDelegateBind(asmodule, data.position);
     let snippet = prefix;
     snippet += indent+"UFUNCTION()\n";
-    snippet += GenerateMethodHeaderString("private ", indent, data.name, delegateType.delegateReturn, delegateType.delegateArgs);
+
+    let delegateArgs = delegateType.delegateArgs;
+
+    // Apply any wildcards to the signature of the method
+    if (data["wildcardType"] && data["wildcardName"])
+    {
+        for (let i = 0; i < delegateArgs.length; ++i)
+        {
+            if (delegateArgs[i].name == data["wildcardName"])
+            {
+                let modifiedArgs = new Array<typedb.DBArg>();
+                for (let j = 0; j < delegateArgs.length; ++j)
+                {
+                    if (i == j)
+                    {
+                        let arg = new typedb.DBArg();
+                        arg.name = delegateArgs[j].name;
+                        arg.defaultvalue = delegateArgs[j].defaultvalue;
+                        arg.typename = typedb.TransferTypeQualifiers(delegateArgs[j].typename, data["wildcardType"]);
+                        modifiedArgs.push(arg);
+                    }
+                    else
+                    {
+                        modifiedArgs.push(delegateArgs[j]);
+                    }
+                }
+
+                delegateArgs = modifiedArgs;
+                break;
+            }
+        }
+    }
+
+    snippet += GenerateMethodHeaderString("private ", indent, data.name, delegateType.delegateReturn, delegateArgs);
     snippet += "\n";
     snippet += indent+"{\n";
     snippet += indent+"}\n";
@@ -400,6 +449,72 @@ function GenerateMethodHeaderString(prefix : string, indent : string, name : str
 
     snippet += ")";
     return snippet;
+}
+
+function FindInsertPositionForGeneratedDelegateBind(asmodule : scriptfiles.ASModule, bindPosition : Position) : [Position, string, string, string]
+{
+    let offset = asmodule.getOffset(bindPosition);
+    let curScope = asmodule.getScopeAt(offset);
+    let curStatement = curScope.getStatementAt(offset);
+    let classScope = curScope.getParentTypeScope();
+
+    if (!curStatement || !classScope)
+        return FindInsertPositionForGeneratedMethod(asmodule, bindPosition);
+
+    // Find a delegate bind before this in the scope and place the function after its function
+    // If there are no binds before it, find the first subsequent delegate bind and place it in front
+    let insertPosition : Position = null;
+    let insideType = classScope.getDatabaseType();
+    for (let otherBind of asmodule.delegateBinds)
+    {
+        if (!otherBind.statement)
+            continue;
+        if (!otherBind.node_name)
+            continue;
+        if (!otherBind.node_object)
+            continue;
+
+        // Stop when we reach the end of the current scope
+        if (curScope.end_offset < otherBind.statement.start_offset)
+            break;
+
+        // Ignore things outside of our scope
+        if (otherBind.scope != curScope)
+            continue;
+
+        // Ignore the bind we're generating
+        if (otherBind.statement == curStatement)
+            continue;
+
+        let boundFunction = otherBind.resolveBoundFunction();
+        if (!boundFunction)
+            continue;
+        if (boundFunction.containingType != insideType)
+            continue;
+
+        if (otherBind.statement.start_offset < curStatement.start_offset)
+        {
+            // Try "after the previous bind" first
+            insertPosition = asmodule.getPosition(boundFunction.moduleScopeEnd);
+        }
+        else if (otherBind.statement.start_offset > curStatement.end_offset)
+        {
+            // Fall back to "in front of the next bind"
+            if (!insertPosition)
+            {
+                insertPosition = asmodule.getPosition(boundFunction.moduleOffset);
+                if (insertPosition.line > 0)
+                    insertPosition.line -= 1;
+            }
+
+            break;
+        }
+    }
+
+    if (insertPosition)
+        return FindInsertPositionForGeneratedMethod(asmodule, insertPosition);
+    else
+        return FindInsertPositionForGeneratedMethod(asmodule, bindPosition);
 }
 
 function FindInsertPositionForGeneratedMethod(asmodule : scriptfiles.ASModule, afterPosition : Position) : [Position, string, string, string]
@@ -477,7 +592,7 @@ function FindInsertPositionForGeneratedMethod(asmodule : scriptfiles.ASModule, a
         else if (!subscope.element_head)
             checkStartPos = asmodule.getPosition(subscope.end_offset);
 
-        if (checkStartPos.line >= afterPosition.line)
+        if (checkStartPos.line > afterPosition.line)
         {
             prefix += "\n";
             return [Position.create(scopeStartPos.line-1, 10000), indent, prefix, suffix];
@@ -696,33 +811,48 @@ function AddCastHelpers(context : CodeActionContext)
 
     let leftType : typedb.DBType = null;
     let rightType : typedb.DBType = null;
+    let codeNode = statement.ast;
 
-    if (statement.ast.type == scriptfiles.node_types.Assignment)
+    switch(codeNode.type)
     {
-        let leftNode = statement.ast.children[0];
-        let rightNode = statement.ast.children[1];
+        case scriptfiles.node_types.IfStatement:
+        case scriptfiles.node_types.ElseStatement:
+        case scriptfiles.node_types.ForLoop:
+        case scriptfiles.node_types.ForEachLoop:
+        case scriptfiles.node_types.WhileLoop:
+        case scriptfiles.node_types.CaseStatement:
+        case scriptfiles.node_types.DefaultCaseStatement:
+            if (codeNode.children[codeNode.children.length-1])
+                codeNode = codeNode.children[codeNode.children.length-1];
+        break;
+    }
+
+    if (codeNode.type == scriptfiles.node_types.Assignment)
+    {
+        let leftNode = codeNode.children[0];
+        let rightNode = codeNode.children[1];
         if (!leftNode || !rightNode)
             return;
 
         leftType = scriptfiles.ResolveTypeFromExpression(scope, leftNode);
         rightType = GetTypeFromExpressionIgnoreNullptr(scope, rightNode);
     }
-    else if (statement.ast.type == scriptfiles.node_types.VariableDecl)
+    else if (codeNode.type == scriptfiles.node_types.VariableDecl)
     {
-        if (statement.ast.typename)
-            leftType = typedb.LookupType(context.scope.getNamespace(), statement.ast.typename.value);
+        if (codeNode.typename)
+            leftType = typedb.LookupType(context.scope.getNamespace(), codeNode.typename.value);
 
-        if (statement.ast.expression)
-            rightType = GetTypeFromExpressionIgnoreNullptr(scope, statement.ast.expression);
+        if (codeNode.expression)
+            rightType = GetTypeFromExpressionIgnoreNullptr(scope, codeNode.expression);
     }
-    else if (statement.ast.type == scriptfiles.node_types.ReturnStatement)
+    else if (codeNode.type == scriptfiles.node_types.ReturnStatement)
     {
         let dbFunc = scope.getDatabaseFunction();
         if (dbFunc && dbFunc.returnType)
             leftType = typedb.LookupType(context.scope.getNamespace(), dbFunc.returnType);
 
-        if (statement.ast.children && statement.ast.children[0])
-            rightType = GetTypeFromExpressionIgnoreNullptr(scope, statement.ast.children[0]);
+        if (codeNode.children && codeNode.children[0])
+            rightType = GetTypeFromExpressionIgnoreNullptr(scope, codeNode.children[0]);
     }
 
     if (!leftType || !rightType)
@@ -769,19 +899,34 @@ function ResolveCastHelper(asmodule : scriptfiles.ASModule, action : CodeAction,
     if (!statement.ast)
         return;
 
+    let codeNode = statement.ast;
+    switch(codeNode.type)
+    {
+        case scriptfiles.node_types.IfStatement:
+        case scriptfiles.node_types.ElseStatement:
+        case scriptfiles.node_types.ForLoop:
+        case scriptfiles.node_types.ForEachLoop:
+        case scriptfiles.node_types.WhileLoop:
+        case scriptfiles.node_types.CaseStatement:
+        case scriptfiles.node_types.DefaultCaseStatement:
+            if (codeNode.children[codeNode.children.length-1])
+                codeNode = codeNode.children[codeNode.children.length-1];
+        break;
+    }
+
     let rightNode : any = null;
-    if (statement.ast.type == scriptfiles.node_types.Assignment)
+    if (codeNode.type == scriptfiles.node_types.Assignment)
     {
-        rightNode = statement.ast.children[1];
+        rightNode = codeNode.children[1];
     }
-    else if (statement.ast.type == scriptfiles.node_types.VariableDecl)
+    else if (codeNode.type == scriptfiles.node_types.VariableDecl)
     {
-        rightNode = statement.ast.expression;
+        rightNode = codeNode.expression;
     }
-    else if (statement.ast.type == scriptfiles.node_types.ReturnStatement)
+    else if (codeNode.type == scriptfiles.node_types.ReturnStatement)
     {
-        if (statement.ast.children && statement.ast.children[0])
-            rightNode = statement.ast.children[0]
+        if (codeNode.children && codeNode.children[0])
+            rightNode = codeNode.children[0]
     }
 
     if (!rightNode)
@@ -1001,9 +1146,28 @@ function AddVariablePromotionHelper(context : CodeActionContext)
     if (!codeNode)
         return;
 
-    if (codeNode.type == scriptfiles.node_types.Assignment)
+    let innerStatement : any = null;
+    switch (codeNode.type)
     {
-        let leftNode = codeNode.children[0];
+        case scriptfiles.node_types.Assignment:
+            innerStatement = codeNode;
+        break;
+
+        case scriptfiles.node_types.IfStatement:
+        case scriptfiles.node_types.ElseStatement:
+        case scriptfiles.node_types.ForLoop:
+        case scriptfiles.node_types.ForEachLoop:
+        case scriptfiles.node_types.WhileLoop:
+        case scriptfiles.node_types.CaseStatement:
+        case scriptfiles.node_types.DefaultCaseStatement:
+            if (codeNode.children[codeNode.children.length-1])
+                innerStatement = codeNode.children[codeNode.children.length-1];
+        break;
+    }
+
+    if (innerStatement && innerStatement.type == scriptfiles.node_types.Assignment)
+    {
+        let leftNode = innerStatement.children[0];
         if (!leftNode || leftNode.type != scriptfiles.node_types.Identifier)
             return;
 
@@ -1013,7 +1177,7 @@ function AddVariablePromotionHelper(context : CodeActionContext)
             return;
 
         // If we don't know what type is on the right we can't provide this action
-        let rvalueType = scriptfiles.ResolveTypeFromExpression(context.scope, codeNode.children[1]);
+        let rvalueType = scriptfiles.ResolveTypeFromExpression(context.scope, innerStatement.children[1]);
         if(!rvalueType)
             return;
 
@@ -1277,8 +1441,9 @@ function AddMacroActions(context : CodeActionContext)
             let variableName = context.statement.ast.name.value;
             let varType = typedb.LookupType(context.scope.getNamespace(), context.statement.ast.typename.value);
             let isActorComponent = varType && varType.inheritsFrom("UActorComponent");
-            let isWidget = varType && varType.inheritsFrom("UWidget");
             let isInsideWidget = dbType && dbType.inheritsFrom("UWidget");
+            let isWidget = varType && varType.inheritsFrom("UWidget");
+            let isWidgetAnim = varType && varType.inheritsFrom("UWidgetAnimation");
 
             if (!dbType.isStruct
                 && isActorComponent
@@ -1297,19 +1462,37 @@ function AddMacroActions(context : CodeActionContext)
                 });
             }
 
-            if (isWidget && isInsideWidget)
+            if (isInsideWidget)
             {
-                context.actions.push(<CodeAction> {
-                    kind: CodeActionKind.QuickFix,
-                    title: `Add UPROPERTY(BindWidget)`,
-                    source: "angelscript",
-                    data: {
-                        uri: context.module.uri,
-                        type: "insertMacro",
-                        macro: "UPROPERTY(BindWidget)",
-                        position: context.range_start,
-                    }
-                });
+                if (isWidget)
+                {
+                    context.actions.push(<CodeAction> {
+                        kind: CodeActionKind.QuickFix,
+                        title: `Add UPROPERTY(BindWidget)`,
+                        source: "angelscript",
+                        data: {
+                            uri: context.module.uri,
+                            type: "insertMacro",
+                            macro: "UPROPERTY(BindWidget)",
+                            position: context.range_start,
+                        }
+                    });
+                }
+
+                if (isWidgetAnim)
+                {
+                    context.actions.push(<CodeAction> {
+                        kind: CodeActionKind.QuickFix,
+                        title: `Add UPROPERTY(BindWidgetAnim)`,
+                        source: "angelscript",
+                        data: {
+                            uri: context.module.uri,
+                            type: "insertMacro",
+                            macro: "UPROPERTY(BindWidgetAnim)",
+                            position: context.range_start,
+                        }
+                    });
+                }
             }
 
             context.actions.push(<CodeAction> {
@@ -1324,7 +1507,7 @@ function AddMacroActions(context : CodeActionContext)
                 }
             });
 
-            if (!isActorComponent && !isWidget)
+            if (!isActorComponent && !isWidget && !isWidgetAnim)
             {
                 context.actions.push(<CodeAction> {
                     kind: CodeActionKind.QuickFix,

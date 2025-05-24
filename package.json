@@ -2,8 +2,9 @@
     "name": "unreal-angelscript",
     "displayName": "Unreal Angelscript",
     "description": "Language Server and Debug Adapter for use with the UnrealEngine-Angelscript plugin from https://github.com/Hazelight/UnrealEngine-Angelscript",
-    "version": "1.7.6",
+    "version": "1.8.1",
     "publisher": "Hazelight",
+    "icon": "resources/angelscript_unreal.png",
     "engines": {
         "vscode": "^1.65.0"
     },
@@ -21,6 +22,40 @@
     },
     "main": "./extension/out/extension",
     "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "angelscript-api",
+                    "title": "Angelscript API",
+                    "icon": "resources/angelscript_unreal.png"
+                }
+            ]
+        },
+        "views": {
+            "angelscript-api": [
+                {
+                    "id": "angelscript-api-search",
+                    "name": "Search",
+                    "icon": "resources/angelscript_unreal.png",
+                    "type": "webview",
+                    "initialSize": 1
+                },
+                {
+                    "id": "angelscript-api-list",
+                    "name": "List",
+                    "icon": "resources/angelscript_unreal.png",
+                    "type": "tree",
+                    "initialSize": 20
+                },
+                {
+                    "id": "angelscript-api-details",
+                    "name": "Details",
+                    "icon": "resources/angelscript_unreal.png",
+                    "type": "webview",
+                    "initialSize": 5
+                }
+            ]
+        },
         "configuration": {
             "title": "Unreal Angelscript",
             "properties": {
@@ -78,6 +113,15 @@
                     "type": "boolean",
                     "default": true,
                     "description": "Show the name of the type as an inlay hint on auto declarations."
+                },
+                "UnrealAngelscript.inlayHints.typeHintsForAutoIgnoredTypes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                    ],
+                    "description": "Types in this list will never receive a type hint for an auto declaration"
                 },
                 "UnrealAngelscript.inlayHints.parameterHintsIgnoredParameterNames": {
                     "type": "array",
@@ -394,6 +438,21 @@
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+                },
+                "UnrealAngelscript.completion.dependencyRestrictions": {
+                    "type": "array",
+                    "default": [],
+                    "description": "Restrictions to apply for which modules can depend on symbols from which other modules",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "isolate": {
+                                "type": "string",
+                                "default": "",
+                                "description": "Isolate symbols in modules matching this, so they cannot be used outside that match"
                             }
                         }
                     }

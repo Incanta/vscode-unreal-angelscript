@@ -45,6 +45,7 @@ import * as inlayhints from './inlay_hints';
 import * as inlinevalues from './inline_values';
 import * as colorpicker from './color_picker';
 import * as typehierarchy from './type_hierarchy';
+import * as api_docs from './api_docs';
 import * as fs from 'fs';
 import * as glob from 'glob';
 
@@ -204,6 +205,15 @@ function connect_unreal() {
                 {
                     scriptSettings.deprecateStaticClass = msg.readBool();
                     scriptSettings.disallowStaticClass = msg.readBool();
+                }
+                if (version >= 6)
+                {
+                    scriptSettings.exposeGlobalFunctions = msg.readBool();
+                }
+                if (version >= 7)
+                {
+                    scriptSettings.deprecateActorGenerics = msg.readBool();
+                    scriptSettings.disallowActorGenerics = msg.readBool();
                 }
             }
             else if(msg.type == MessageType.ReplaceAssetDefinition)
@@ -609,7 +619,10 @@ connection.onCompletion((_textDocumentPosition: TextDocumentPositionParams): Com
     let asmodule = GetAndParseModule(_textDocumentPosition.textDocument.uri);
     if (!asmodule)
         return null;
+    // let startTime = performance.now();
     let completions = parsedcompletion.Complete(asmodule, _textDocumentPosition.position);
+    // let endTime = performance.now();
+    // console.log("Generating completion took "+(endTime - startTime)+" ms");
     return completions;
 });
 
@@ -1021,6 +1034,54 @@ connection.onRequest("angelscript/getModuleForSymbol", (...params: any[]) : stri
     }
 });
 
+connection.onRequest("angelscript/getAPI", (root : string) : any => {
+    if (typedb.HasTypesFromUnreal())
+        return api_docs.GetAPIList(root);
+
+    function timerFunc(resolve : any, reject : any, triesLeft : number) {
+        if (typedb.HasTypesFromUnreal())
+            return resolve(api_docs.GetAPIList(root));
+        setTimeout(function() { timerFunc(resolve, reject, triesLeft-1); }, 100);
+    }
+    let promise = new Promise<any>(function(resolve, reject)
+    {
+        timerFunc(resolve, reject, 50);
+    });
+    return promise;
+});
+
+connection.onRequest("angelscript/getAPISearch", (filter : string) : any => {
+    if (typedb.HasTypesFromUnreal())
+        return api_docs.GetAPISearch(filter);
+
+    function timerFunc(resolve : any, reject : any, triesLeft : number) {
+        if (typedb.HasTypesFromUnreal())
+            return resolve(api_docs.GetAPISearch(filter));
+        setTimeout(function() { timerFunc(resolve, reject, triesLeft-1); }, 100);
+    }
+    let promise = new Promise<any>(function(resolve, reject)
+    {
+        timerFunc(resolve, reject, 50);
+    });
+    return promise;
+});
+
+connection.onRequest("angelscript/getAPIDetails", (root : any) : any => {
+    if (typedb.HasTypesFromUnreal())
+        return api_docs.GetAPIDetails(root);
+
+    function timerFunc(resolve : any, reject : any, triesLeft : number) {
+        if (typedb.HasTypesFromUnreal())
+            return resolve(api_docs.GetAPIDetails(root));
+        setTimeout(function() { timerFunc(resolve, reject, triesLeft-1); }, 100);
+    }
+    let promise = new Promise<any>(function(resolve, reject)
+    {
+        timerFunc(resolve, reject, 50);
+    });
+    return promise;
+});
+
 connection.languages.inlineValue.on(function (params : InlineValueParams) : Array<InlineValue> {
     let asmodule = GetAndParseModule(params.textDocument.uri);
     if (!asmodule)
@@ -1127,7 +1188,9 @@ connection.onDidChangeConfiguration(function (change : DidChangeConfigurationPar
 
     let completionSettings = parsedcompletion.GetCompletionSettings();
     completionSettings.mathCompletionShortcuts = settings.mathCompletionShortcuts;
+    completionSettings.dependencyRestrictions = settings.completion.dependencyRestrictions;
     completionSettings.correctFloatLiteralsWhenExpectingDoublePrecision = settings.correctFloatLiteralsWhenExpectingDoublePrecision;
+    parsedcompletion.RefreshDependencyRestrictions();
 
     let inlayHintSettings = inlayhints.GetInlayHintSettings();
     inlayHintSettings.inlayHintsEnabled = settings.inlayHints.inlayHintsEnabled;
@@ -1136,6 +1199,7 @@ connection.onDidChangeConfiguration(function (change : DidChangeConfigurationPar
     inlayHintSettings.parameterReferenceHints = settings.inlayHints.parameterReferenceHints;
     inlayHintSettings.parameterHintsForSingleParameterFunctions = settings.inlayHints.parameterHintsForSingleParameterFunctions;
     inlayHintSettings.typeHintsForAutos = settings.inlayHints.typeHintsForAutos;
+    inlayHintSettings.typeHintsIgnoredTypes = new Set<string>(settings.inlayHints.typeHintsForAutoIgnoredTypes as Array<string>);
     inlayHintSettings.parameterHintsIgnoredParameterNames = new Set<string>(settings.inlayHints.parameterHintsIgnoredParameterNames as Array<string>);
     inlayHintSettings.parameterHintsIgnoredFunctionNames = new Set<string>(settings.inlayHints.parameterHintsIgnoredFunctionNames as Array<string>);
 

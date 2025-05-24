@@ -201,6 +201,7 @@ function AddGeneratedCodeForUActorComponent(asmodule : scriptfiles.ASModule, dbt
 
 function AddGeneratedCodeForAActor(asmodule : scriptfiles.ASModule, dbtype : typedb.DBType, nsType : typedb.DBNamespace)
 {
+    if (!scriptfiles.GetScriptSettings().disallowActorGenerics && !scriptfiles.GetScriptSettings().deprecateActorGenerics)
     {
         let method = AddGlobalFunction(asmodule, dbtype, nsType, "Spawn");
         method.returnType = dbtype.name;
@@ -487,8 +488,6 @@ function AddGeneratedCodeForUHazeEffectEventHandler(asmodule : scriptfiles.ASMod
             return;
         if (dbfunc.isBlueprintOverride)
             return;
-        if (dbfunc.args && dbfunc.args.length > 1)
-            return;
         if (dbfunc.returnType && dbfunc.returnType != "void")
             return;
 
@@ -509,11 +508,10 @@ function AddGeneratedCodeForUHazeEffectEventHandler(asmodule : scriptfiles.ASMod
                 new typedb.DBArg().init(actorType, "Actor"),
             ];
 
-            if (dbfunc.args && dbfunc.args.length == 1)
+            if (dbfunc.args)
             {
-                method.args.push(
-                    new typedb.DBArg().init(dbfunc.args[0].typename, dbfunc.args[0].name)
-                );
+                for (let arg of dbfunc.args)
+                    method.args.push(arg);
             }
 
             method.auxiliarySymbols = [{symbol_name: dbfunc.name, container_type: dbtype.name}];

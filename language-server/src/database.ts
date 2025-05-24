@@ -262,6 +262,7 @@ export class DBMethod implements DBSymbol
     delegateBindType : string = null;
     delegateObjectParam : number = -1;
     delegateFunctionParam : number = -1;
+    delegateWildcardParam : number = -1;
 
     methodAnnotation : DBMethodAnnotation = DBMethodAnnotation.None;
 
@@ -391,6 +392,7 @@ export class DBMethod implements DBSymbol
 
             let functionParam = this.macroMeta.get("delegatefunctionparam");
             let objectParam = this.macroMeta.get("delegateobjectparam");
+            let wildcardParam = this.macroMeta.get("delegatewildcardparam");
 
             for (let i = 0, count = this.args.length; i < count; ++i)
             {
@@ -398,6 +400,8 @@ export class DBMethod implements DBSymbol
                     this.delegateObjectParam = i;
                 else if (this.args[i].name == functionParam)
                     this.delegateFunctionParam = i;
+                else if (wildcardParam && this.args[i].name == wildcardParam)
+                    this.delegateWildcardParam = i;
             }
 
         }
@@ -444,7 +448,7 @@ export class DBMethod implements DBSymbol
                 let argDecl = this.args[i].format();
                 if (determineType && this.determinesOutputTypeArgumentIndex == i)
                     argDecl = this.args[i].format(this.applyDeterminesOutputType(this.args[i].typename, determineType).name);
-                if (i > 0 || (skipFirstArg && i > 1))
+                if (i > 1 || (!skipFirstArg && i > 0))
                     decl += ", ";
                 decl += argDecl;
             }
@@ -528,17 +532,6 @@ export class DBMethod implements DBSymbol
 
         if (this.returnType != otherFunc.returnType)
             return false;
-
-        return true;
-    }
-
-    IsAccessibleFromModule(module : string) : boolean
-    {
-        if (this.isLocal)
-        {
-            if (this.declaredModule && this.declaredModule != module)
-                return false;
-        }
 
         return true;
     }
@@ -850,6 +843,14 @@ export class DBType implements DBSymbol
         return false;
     }
 
+    isShadowingNamespace() : boolean
+    {
+        if (this.namespace)
+            return this.namespace.findChildNamespace(this.name) != null;
+        else
+            return RootNamespace.findChildNamespace(this.name) != null;
+    }
+
     extendTypes : Array<DBType> = null;
     extendTypesId : number = -1;
     getExtendTypesList() : Array<DBType>
@@ -880,7 +881,7 @@ export class DBType implements DBSymbol
         return this.extendTypes;
     }
 
-    formatDelegateSignature() : string
+    formatDelegateSignature(wildcardName : string = null, wildcardType : DBType = null) : string
     {
         let decl : string = "";
         if (this.delegateReturn)
@@ -892,7 +893,16 @@ export class DBType implements DBSymbol
             {
                 if (i > 0)
                     decl += ", ";
-                decl += this.delegateArgs[i].format();
+                if (wildcardName && wildcardType && this.delegateArgs[i].name == wildcardName)
+                {
+                    decl += this.delegateArgs[i].format(
+                        TransferTypeQualifiers(this.delegateArgs[i].typename, wildcardType.name)
+                    );
+                }
+                else
+                {
+                    decl += this.delegateArgs[i].format();
+                }
             }
         }
         decl += ")";
@@ -1196,6 +1206,48 @@ export class DBType implements DBSymbol
             }
         }
         return result;
+    }
+
+    findFunctionSymbolByParameterCount(name : string, parameterCount : number) : DBMethod | null
+    {
+        let match : DBMethod = null;
+        for (let type of this.getExtendTypesList())
+        {
+            let syms = type.symbols.get(name);
+            if (syms instanceof Array)
+            {
+                for (let sym of syms)
+                {
+                    if (sym instanceof DBMethod)
+                    {
+                        if (!match
+                            || sym.args.length == parameterCount
+                            || (sym.args.length >= parameterCount && match.args.length < parameterCount)
+                            || (sym.args.length >= parameterCount && sym.args.length < match.args.length)
+                        )
+                        {
+                            match = sym;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                if (syms instanceof DBMethod)
+                {
+                    if (!match
+                        || syms.args.length == parameterCount
+                        || (syms.args.length >= parameterCount && match.args.length < parameterCount)
+                        || (syms.args.length >= parameterCount && syms.args.length < match.args.length)
+                    )
+                    {
+                        match = syms;
+                    }
+                }
+            }
+        }
+
+        return match;
     }
 
     addSymbol(symbol : DBSymbol)

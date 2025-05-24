@@ -15,6 +15,9 @@ export interface ASSettings
     useAngelscriptHaze: boolean,
     deprecateStaticClass: boolean,
     disallowStaticClass: boolean,
+    exposeGlobalFunctions: boolean,
+    deprecateActorGenerics: boolean,
+    disallowActorGenerics: boolean,
 };
 
 let ScriptSettings : ASSettings = {
@@ -23,6 +26,9 @@ let ScriptSettings : ASSettings = {
     useAngelscriptHaze: false,
     deprecateStaticClass: false,
     disallowStaticClass: false,
+    exposeGlobalFunctions: true,
+    deprecateActorGenerics: false,
+    disallowActorGenerics: false,
 };
 
 let PreParsedIdentifiersInModules = new Map<string, Set<ASModule>>();
@@ -654,6 +660,46 @@ export class ASDelegateBind
     node_expression : any = null;
     node_object : any = null;
     node_name : any = null;
+    node_wildcard : any = null;
+    wildcard_name : string = null;
+
+    getFunctionName() : string | null
+    {
+        if (!this.node_name)
+            return null;
+        else if (this.node_name.type == node_types.ConstName)
+            return this.node_name.value.substring(2, this.node_name.value.length-1);
+        else if (this.node_name.type == node_types.ConstString)
+            return this.node_name.value.substring(1, this.node_name.value.length-1);
+        else
+            return null;
+    }
+
+    resolveObjectType() : typedb.DBType | null
+    {
+        if (!this.node_object)
+            return null;
+        else
+            return ResolveTypeFromExpression(this.scope, this.node_object);
+    }
+
+    resolveBoundFunction() : typedb.DBMethod | null
+    {
+        let funcName = this.getFunctionName();
+        if (!funcName)
+            return null;
+        let objType = this.resolveObjectType();
+        if (!objType)
+            return null;
+
+        let foundFunc = objType.findFirstSymbol(funcName, typedb.DBAllowSymbol.Functions);
+        if (!foundFunc)
+            foundFunc = objType.findMethodByUnrealName(funcName);
+
+        if (foundFunc && foundFunc instanceof typedb.DBMethod)
+            return foundFunc;
+        return null;
+    }
 };
 
 export class ASAnnotatedCall
@@ -2289,7 +2335,6 @@ function GenerateTypeInformation(scope : ASScope)
             break;
             case node_types.IfStatement:
             case node_types.ElseStatement:
-            case node_types.ForLoop:
             case node_types.WhileLoop:
             case node_types.CaseStatement:
             case node_types.DefaultCaseStatement:
@@ -3093,6 +3138,10 @@ export function ResolveTypeFromExpression(scope : ASScope, node : any) : typedb.
                         else
                             return left_type;
                     }
+                    else
+                    {
+                        return left_type;
+                    }
                 }
                 else
                 {
@@ -3404,7 +3453,7 @@ function ResolveTypeFromIdentifier(scope : ASScope, identifier : string) : typed
         {
             if (sym instanceof typedb.DBMethod && sym.isProperty && sym.returnType && !sym.isMixin)
             {
-                if (sym.isLocal && !sym.IsAccessibleFromModule(scope.module.modulename))
+                if (sym.isLocal && sym.declaredModule && sym.declaredModule != scope.module.modulename)
                     continue;
                 return typedb.LookupType(sym.namespace, sym.returnType);
             }
@@ -3419,7 +3468,7 @@ function ResolveTypeFromIdentifier(scope : ASScope, identifier : string) : typed
         {
             if (sym instanceof typedb.DBMethod && sym.isProperty && sym.args.length > 0 && !sym.isMixin)
             {
-                if (sym.isLocal && !sym.IsAccessibleFromModule(scope.module.modulename))
+                if (sym.isLocal && sym.declaredModule && sym.declaredModule != scope.module.modulename)
                     continue;
                 return typedb.LookupType(sym.namespace, sym.args[0].typename);
             }
@@ -3578,7 +3627,7 @@ function ResolveFunctionFromType(scope : ASScope, dbtype : typedb.DBType, name :
                 {
                     if (!usedSymbol.isMixin)
                         continue;
-                    if (usedSymbol.isLocal && !usedSymbol.IsAccessibleFromModule(scope.module.modulename))
+                    if (usedSymbol.isLocal && usedSymbol.declaredModule && usedSymbol.declaredModule != scope.module.modulename)
                         continue;
                     if (usedSymbol.args.length != 0 && dbtype.inheritsFrom(usedSymbol.args[0].typename))
                         return usedSymbol;
@@ -3610,7 +3659,7 @@ function ResolveFunctionFromIdentifier(scope : ASScope, identifier : string) : t
         {
             if (sym instanceof typedb.DBMethod)
             {
-                if (sym.isLocal && !sym.IsAccessibleFromModule(scope.module.modulename))
+                if (sym.isLocal && sym.declaredModule && sym.declaredModule != scope.module.modulename)
                     continue;
                 if (sym.isMixin)
                 {
@@ -3741,7 +3790,7 @@ function ResolveFunctionOverloadsFromType(scope : ASScope, dbtype : typedb.DBTyp
                 {
                     if (symbol.isMixin)
                         continue;
-                    if (symbol.isLocal && !symbol.IsAccessibleFromModule(scope.module.modulename))
+                    if (symbol.isLocal && symbol.declaredModule && symbol.declaredModule != scope.module.modulename)
                         continue;
                     functions.push(symbol);
                 }
@@ -3761,7 +3810,7 @@ function ResolveFunctionOverloadsFromType(scope : ASScope, dbtype : typedb.DBTyp
                 {
                     if (!symbol.isMixin)
                         continue;
-                    if (symbol.isLocal && !symbol.IsAccessibleFromModule(scope.module.modulename))
+                    if (symbol.isLocal && symbol.declaredModule && symbol.declaredModule != scope.module.modulename)
                         continue;
                     if (symbol.args.length != 0 && dbtype.inheritsFrom(symbol.args[0].typename))
                         functions.push(symbol);
@@ -3791,7 +3840,7 @@ function ResolveFunctionOverloadsFromNamespace(scope : ASScope, namespace : type
                 {
                     if (symbol.isMixin)
                         continue;
-                    if (symbol.isLocal && !symbol.IsAccessibleFromModule(scope.module.modulename))
+                    if (symbol.isLocal && symbol.declaredModule && symbol.declaredModule != scope.module.modulename)
                         continue;
                     functions.push(symbol);
                 }
@@ -3883,6 +3932,7 @@ class ASParseContext
     isRootIdentifier : boolean = false;
     argumentFunction : typedb.DBMethod = null;
     isResolvingFunction : boolean = false;
+    functionPassedParameterCount : number = -1;
 };
 
 export function GetConstantNumberFromNode(node : any) : [boolean, number]
@@ -3999,6 +4049,7 @@ function DetectNodeSymbols(scope : ASScope, statement : ASStatement, node : any,
             {
                 parseContext.isWriteAccess = outerWriteAccess;
                 parseContext.isRootIdentifier = outerRootIdentifier;
+                parseContext.isResolvingFunction = outerIsResolvingFunction;
                 return DetectSymbolsInType(scope, statement, left_symbol, node.children[1], parseContext, symbol_type);
             }
 
@@ -4281,6 +4332,10 @@ function DetectNodeSymbols(scope : ASScope, statement : ASStatement, node : any,
             if (left_type == null)
             {
                 parseContext.isResolvingFunction = true;
+                if (node.children[1])
+                    parseContext.functionPassedParameterCount = node.children[1].children.length;
+                else
+                    parseContext.functionPassedParameterCount = 0;
                 left_symbol = DetectNodeSymbols(scope, statement, node.children[0], parseContext, typedb.DBAllowSymbol.Functions);
                 parseContext.isResolvingFunction = false;
 
@@ -4307,6 +4362,13 @@ function DetectNodeSymbols(scope : ASScope, statement : ASStatement, node : any,
                         delegateBind.node_object = node.children[1].children[left_symbol.delegateObjectParam];
                     if (node.children[1].children[left_symbol.delegateFunctionParam])
                         delegateBind.node_name = node.children[1].children[left_symbol.delegateFunctionParam];
+
+                    if (left_symbol.delegateWildcardParam != -1 && node.children[1].children[left_symbol.delegateWildcardParam])
+                    {
+                        delegateBind.node_wildcard = node.children[1].children[left_symbol.delegateWildcardParam];
+                        delegateBind.wildcard_name = left_symbol.macroMeta.get("delegatewildcardparam");
+                    }
+
                     delegateBind.delegateType = left_symbol.delegateBindType;
                     scope.module.delegateBinds.push(delegateBind);
                 }
@@ -5063,7 +5125,7 @@ function DetectIdentifierSymbols(scope : ASScope, statement : ASStatement, node 
                 if (usedSymbol.isConstructor)
                     continue;
 
-                if (usedSymbol.isLocal && !usedSymbol.IsAccessibleFromModule(scope.module.modulename))
+                if (usedSymbol.isLocal && usedSymbol.declaredModule && usedSymbol.declaredModule != scope.module.modulename)
                     continue;
                 let addedSym = AddIdentifierSymbol(scope, statement, node, ASSymbolType.GlobalFunction,
                     usedSymbol.namespace.getQualifiedNamespace(), usedSymbol.name, parseContext.isWriteAccess);
@@ -5094,7 +5156,7 @@ function DetectIdentifierSymbols(scope : ASScope, statement : ASStatement, node 
             {
                 if (usedSymbol instanceof typedb.DBMethod && usedSymbol.isProperty && !usedSymbol.isMixin)
                 {
-                    if (usedSymbol.isLocal && !usedSymbol.IsAccessibleFromModule(scope.module.modulename))
+                    if (usedSymbol.isLocal && usedSymbol.declaredModule && usedSymbol.declaredModule != scope.module.modulename)
                         continue;
                     let addedSym = AddIdentifierSymbol(scope, statement, node, ASSymbolType.GlobalAccessor,
                         usedSymbol.namespace.getQualifiedNamespace(), usedSymbol.name, parseContext.isWriteAccess);
@@ -5113,7 +5175,7 @@ function DetectIdentifierSymbols(scope : ASScope, statement : ASStatement, node 
             {
                 if (usedSymbol instanceof typedb.DBMethod && usedSymbol.isProperty && usedSymbol.args.length != 0 && !usedSymbol.isMixin)
                 {
-                    if (usedSymbol.isLocal && !usedSymbol.IsAccessibleFromModule(scope.module.modulename))
+                    if (usedSymbol.isLocal && usedSymbol.declaredModule && usedSymbol.declaredModule != scope.module.modulename)
                         continue;
                     let addedSym = AddIdentifierSymbol(scope, statement, node, ASSymbolType.GlobalAccessor,
                         usedSymbol.namespace.getQualifiedNamespace(), usedSymbol.name, parseContext.isWriteAccess);
@@ -5410,7 +5472,8 @@ function CheckIdentifierIsPrefixForValidSymbol(scope : ASScope, statement : ASSt
         {
             for (let func of prefixed)
             {
-                if (func instanceof typedb.DBMethod && typedb.AllowsFunctions(symbol_type) && func.IsAccessibleFromModule(scope.module.modulename))
+                if (func instanceof typedb.DBMethod && typedb.AllowsFunctions(symbol_type)
+                    && (!func.isLocal || !func.declaredModule || func.declaredModule == scope.module.modulename))
                 {
                     if (!func.isMixin || (insideType && func.args.length != 0 && insideType.inheritsFrom(func.args[0].typename)))
                         return true;
@@ -5434,7 +5497,8 @@ function CheckIdentifierIsPrefixForValidSymbol(scope : ASScope, statement : ASSt
         {
             for (let func of getAccessors)
             {
-                if (func instanceof typedb.DBMethod && func.isProperty && !func.isMixin && func.IsAccessibleFromModule(scope.module.modulename))
+                if (func instanceof typedb.DBMethod && func.isProperty && !func.isMixin
+                    && (!func.isLocal || !func.declaredModule || func.declaredModule == scope.module.modulename))
                     return true;
             }
         }
@@ -5444,7 +5508,8 @@ function CheckIdentifierIsPrefixForValidSymbol(scope : ASScope, statement : ASSt
         {
             for (let func of setAccessors)
             {
-                if (func instanceof typedb.DBMethod && func.isProperty && !func.isMixin && func.IsAccessibleFromModule(scope.module.modulename))
+                if (func instanceof typedb.DBMethod && func.isProperty && !func.isMixin
+                    && (!func.isLocal || !func.declaredModule || func.declaredModule == scope.module.modulename))
                     return true;
             }
         }
@@ -5471,7 +5536,12 @@ function DetectSymbolsInType(scope : ASScope, statement : ASStatement, inSymbol 
     let symType : ASSymbolType = ASSymbolType.UnknownError;
 
     // Could be a symbol inside the type
-    let usedSymbol = dbtype.findFirstSymbol(node.value, symbol_type);
+    let usedSymbol : typedb.DBSymbol;
+    if (parseContext.isResolvingFunction)
+        usedSymbol = dbtype.findFunctionSymbolByParameterCount(node.value, parseContext.functionPassedParameterCount);
+    else
+        usedSymbol = dbtype.findFirstSymbol(node.value, symbol_type);
+
     if (usedSymbol)
     {
         if (usedSymbol instanceof typedb.DBProperty)
@@ -5582,7 +5652,7 @@ function CheckIdentifierIsPrefixForValidSymbolInType(scope : ASScope, statement 
                 {
                     if (!usedSymbol.isMixin)
                         continue;
-                    if (usedSymbol.isLocal && usedSymbol.IsAccessibleFromModule(scope.module.modulename))
+                    if (usedSymbol.isLocal && usedSymbol.declaredModule && usedSymbol.declaredModule != scope.module.modulename)
                         continue;
                     if (usedSymbol.args.length != 0 && dbtype.inheritsFrom(usedSymbol.args[0].typename))
                     {

@@ -11,6 +11,7 @@ export interface InlayHintSettings
     parameterHintsForSingleParameterFunctions : boolean;
     parameterHintsForComplexExpressions : boolean;
     typeHintsForAutos : boolean;
+    typeHintsIgnoredTypes : Set<string>;
     parameterHintsIgnoredParameterNames : Set<string>;
     parameterHintsIgnoredFunctionNames : Set<string>;
 };
@@ -22,6 +23,7 @@ let InlayHintSettings : InlayHintSettings = {
     parameterHintsForSingleParameterFunctions : false,
     parameterHintsForComplexExpressions : true,
     typeHintsForAutos : true,
+    typeHintsIgnoredTypes : new Set<string>(),
     parameterHintsIgnoredParameterNames : new Set<string>(),
     parameterHintsIgnoredFunctionNames : new Set<string>(),
 };
@@ -84,6 +86,8 @@ export function GetInlayHintsForScope(scope : scriptfiles.ASScope, start_offset 
             let cleanResultType = typedb.CleanTypeName(scopevar.typename);
             if (cleanResultType == "auto")
                 continue;
+            if (InlayHintSettings.typeHintsIgnoredTypes.has(cleanResultType))
+                continue;
 
             let showAutoHint = true;
 
@@ -126,6 +130,22 @@ export function GetInlayHintsForScope(scope : scriptfiles.ASScope, start_offset 
                 {
                     if (funcNode.value == cleanResultType)
                         showAutoHint = false;
+                }
+
+                // If any of the arguments are literals of that type, elide the hint
+                if (scopevar.node_expression.children[1]
+                    && scopevar.node_expression.children[1].type == node_types.ArgumentList
+                    && scopevar.node_expression.children[1].children
+                )
+                {
+                    for (let child of scopevar.node_expression.children[1].children)
+                    {
+                        if (child && child.type == node_types.Identifier)
+                        {
+                            if (child.value == cleanResultType)
+                                showAutoHint = false;
+                        }
+                    }
                 }
             }
 
