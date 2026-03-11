@@ -12,16 +12,16 @@
         "url": "https://github.com/Microsoft/vscode-extension-samples"
     },
     "dependencies": {
-        "@modelcontextprotocol/sdk": "^1.22.0",
+        "@modelcontextprotocol/sdk": "^1.27.1",
         "@types/glob": "^7.1.3",
         "glob": "^7.1.3",
         "moo": "^0.5.1",
         "vscode-languageserver": "^8.1.0",
         "vscode-languageserver-textdocument": "^1.0.8",
-        "vscode-uri": "^3.0.3",
-        "zod": "^3.23.8"
+        "vscode-uri": "^3.0.3"
     },
     "devDependencies": {
+        "@types/node": "^18.19.86",
         "@types/vscode": "^1.65.0",
         "typescript": "^4.5.5",
         "vscode-test": "^1.3.0"
