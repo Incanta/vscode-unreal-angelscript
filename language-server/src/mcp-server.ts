@@ -1,3 +1,5 @@
+// Using require() because TypeScript 4.x moduleResolution:"node" doesn't support
+// the package.json "exports" field used by @modelcontextprotocol/sdk
 /* eslint-disable @typescript-eslint/no-var-requires */
 const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js") as { McpServer: any };
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js") as { StdioServerTransport: any };

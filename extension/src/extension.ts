@@ -246,7 +246,7 @@ function registerMcpServer(context: ExtensionContext): void
 
         console.log("AngelScript MCP server registered");
     } catch (e) {
-        console.log("Failed to register MCP server: " + e);
+        console.log("Failed to register MCP server: " + (e instanceof Error ? e.message : String(e)));
     }
 }
 

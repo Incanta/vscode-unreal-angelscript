@@ -92,7 +92,7 @@ function exportMcpDatabase(): void {
     try {
         databaseExport.writeDatabaseToFile(mcpDatabasePath);
     } catch (e) {
-        // Silently ignore export errors
+        connection.console.warn("Failed to export MCP database: " + (e instanceof Error ? e.message : String(e)));
     }
 }
 
@@ -115,7 +115,7 @@ function exportMcpDiagnostics(uri: string, diagnostics: any[]): void {
         }
         databaseExport.writeDiagnosticsToFile(mcpDiagnosticsPath, allDiagnostics);
     } catch (e) {
-        // Silently ignore export errors
+        connection.console.warn("Failed to export MCP diagnostics: " + (e instanceof Error ? e.message : String(e)));
     }
 }
 
