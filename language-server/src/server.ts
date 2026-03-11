@@ -46,8 +46,11 @@ import * as inlinevalues from './inline_values';
 import * as colorpicker from './color_picker';
 import * as typehierarchy from './type_hierarchy';
 import * as api_docs from './api_docs';
+import * as databaseExport from './database-export';
 import * as fs from 'fs';
+import * as path from 'path';
 import * as glob from 'glob';
+import * as os from 'os';
 
 import {
     Message, MessageType, readMessages, buildGoTo,
@@ -79,6 +82,42 @@ let UnrealTypesTimedOut = false;
 
 let settings : any = null;
 let reconnectTimeoutId : any = undefined;
+
+// MCP data export directory
+let mcpDataDir = path.join(os.tmpdir(), 'angelscript-mcp');
+let mcpDatabasePath = path.join(mcpDataDir, 'database.json');
+let mcpDiagnosticsPath = path.join(mcpDataDir, 'diagnostics.json');
+
+function exportMcpDatabase(): void {
+    try {
+        databaseExport.writeDatabaseToFile(mcpDatabasePath);
+    } catch (e) {
+        // Silently ignore export errors
+    }
+}
+
+function exportMcpDiagnostics(uri: string, diagnostics: any[]): void {
+    try {
+        // Read existing diagnostics file and update the entry for this URI
+        let existing = databaseExport.readDiagnosticsFromFile(mcpDiagnosticsPath);
+        let allDiagnostics: databaseExport.ExportedDiagnostic[] = [];
+        if (existing) {
+            allDiagnostics = existing.diagnostics.filter(d => d.uri !== uri);
+        }
+        for (let diag of diagnostics) {
+            allDiagnostics.push({
+                uri: uri,
+                message: diag.message || "",
+                severity: diag.severity === 1 ? "error" : diag.severity === 2 ? "warning" : "information",
+                line: diag.range?.start?.line || 0,
+                character: diag.range?.start?.character || 0,
+            });
+        }
+        databaseExport.writeDiagnosticsToFile(mcpDiagnosticsPath, allDiagnostics);
+    } catch (e) {
+        // Silently ignore export errors
+    }
+}
 
 function connect_unreal()
 {
@@ -175,6 +214,9 @@ function connect_unreal()
 
                 // Make sure no modules are resolved anymore
                 ReResolveAllModules();
+
+                // Export database for MCP server consumption
+                exportMcpDatabase();
             }
             else if(msg.type == MessageType.AssetDatabase)
             {
@@ -414,6 +456,9 @@ function DetectUnrealTypeListTimeout()
 
     // Make sure no modules are resolved anymore
     ReResolveAllModules();
+
+    // Export database for MCP server consumption
+    exportMcpDatabase();
 }
 
 function TickQueues()
@@ -588,6 +633,7 @@ function IsInitialParseDone()
 
 scriptdiagnostics.OnDiagnosticsChanged( function (uri : string, diagnostics : Array<Diagnostic>){
     connection.sendDiagnostics({ "uri": uri, "diagnostics": diagnostics });
+    exportMcpDiagnostics(uri, diagnostics);
 });
 
 connection.onDidChangeWatchedFiles((_change) => {
