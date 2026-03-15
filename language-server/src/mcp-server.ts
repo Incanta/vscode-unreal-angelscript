@@ -13,8 +13,10 @@ import {
     ExportedMethod,
     ExportedProperty,
     ExportedDiagnostic,
+    OfflineCacheData,
     readDatabaseFromFile,
     readDiagnosticsFromFile,
+    readOfflineCache,
 } from './database-export';
 
 let database: ExportedDatabase | null = null;
@@ -22,8 +24,10 @@ let diagnosticsData: ExportedDiagnostics | null = null;
 
 let databasePath: string | null = null;
 let diagnosticsPath: string | null = null;
+let offlineCachePath: string | null = null;
 
 function loadData(): void {
+    // Try the live data files first (written by language server when UE is connected)
     if (databasePath) {
         let newDb = readDatabaseFromFile(databasePath);
         if (newDb) database = newDb;
@@ -31,6 +35,27 @@ function loadData(): void {
     if (diagnosticsPath) {
         let newDiag = readDiagnosticsFromFile(diagnosticsPath);
         if (newDiag) diagnosticsData = newDiag;
+    }
+
+    // Fall back to offline cache if live data not available
+    if (!database && offlineCachePath) {
+        let cached = readOfflineCache(offlineCachePath);
+        if (cached) {
+            database = {
+                version: cached.version,
+                exportedAt: cached.exportedAt,
+                hasUnrealTypes: cached.hasUnrealTypes,
+                types: cached.types,
+                namespaces: cached.namespaces,
+            };
+            if (!diagnosticsData && cached.diagnostics && cached.diagnostics.length > 0) {
+                diagnosticsData = {
+                    version: cached.version,
+                    exportedAt: cached.exportedAt,
+                    diagnostics: cached.diagnostics,
+                };
+            }
+        }
     }
 }
 
@@ -45,6 +70,27 @@ function watchFiles(): void {
         fs.watch(diagnosticsPath, () => {
             let newDiag = readDiagnosticsFromFile(diagnosticsPath!);
             if (newDiag) diagnosticsData = newDiag;
+        });
+    }
+    if (offlineCachePath && fs.existsSync(offlineCachePath)) {
+        fs.watch(offlineCachePath, () => {
+            let cached = readOfflineCache(offlineCachePath!);
+            if (cached) {
+                database = {
+                    version: cached.version,
+                    exportedAt: cached.exportedAt,
+                    hasUnrealTypes: cached.hasUnrealTypes,
+                    types: cached.types,
+                    namespaces: cached.namespaces,
+                };
+                if (cached.diagnostics && cached.diagnostics.length > 0) {
+                    diagnosticsData = {
+                        version: cached.version,
+                        exportedAt: cached.exportedAt,
+                        diagnostics: cached.diagnostics,
+                    };
+                }
+            }
         });
     }
 }
@@ -116,7 +162,7 @@ server.tool(
         loadData();
         if (!database) {
             return {
-                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected." }],
+                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected, or that a cached .vscode/as-language.json file exists in your project." }],
             };
         }
 
@@ -173,7 +219,7 @@ server.tool(
         loadData();
         if (!database) {
             return {
-                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected." }],
+                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected, or that a cached .vscode/as-language.json file exists in your project." }],
             };
         }
 
@@ -248,7 +294,7 @@ server.tool(
         loadData();
         if (!database) {
             return {
-                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected." }],
+                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected, or that a cached .vscode/as-language.json file exists in your project." }],
             };
         }
 
@@ -307,7 +353,7 @@ server.tool(
         loadData();
         if (!database) {
             return {
-                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected." }],
+                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected, or that a cached .vscode/as-language.json file exists in your project." }],
             };
         }
 
@@ -410,7 +456,7 @@ server.tool(
         loadData();
         if (!database) {
             return {
-                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected." }],
+                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected, or that a cached .vscode/as-language.json file exists in your project." }],
             };
         }
 
@@ -498,7 +544,7 @@ server.tool(
         loadData();
         if (!database) {
             return {
-                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected." }],
+                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected, or that a cached .vscode/as-language.json file exists in your project." }],
             };
         }
 
@@ -578,7 +624,7 @@ server.tool(
         loadData();
         if (!database) {
             return {
-                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected." }],
+                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected, or that a cached .vscode/as-language.json file exists in your project." }],
             };
         }
 
@@ -629,6 +675,9 @@ async function main(): Promise<void> {
             i++;
         } else if (args[i] === "--diagnostics" && i + 1 < args.length) {
             diagnosticsPath = args[i + 1];
+            i++;
+        } else if (args[i] === "--offline-cache" && i + 1 < args.length) {
+            offlineCachePath = args[i + 1];
             i++;
         }
     }

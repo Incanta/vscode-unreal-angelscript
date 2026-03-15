@@ -49,8 +49,8 @@ import * as api_docs from './api_docs';
 import * as databaseExport from './database-export';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as glob from 'glob';
 import * as os from 'os';
+import {glob} from 'glob';
 
 import {
     Message, MessageType, readMessages, buildGoTo,
@@ -88,34 +88,73 @@ let mcpDataDir = path.join(os.tmpdir(), 'angelscript-mcp');
 let mcpDatabasePath = path.join(mcpDataDir, 'database.json');
 let mcpDiagnosticsPath = path.join(mcpDataDir, 'diagnostics.json');
 
+// Workspace roots for offline caching
+let workspaceRoots: string[] = [];
+
+function getOfflineCachePaths(): string[] {
+    return workspaceRoots.map(root => path.join(root, '.vscode', 'as-language.json'));
+}
+
+let currentDiagnosticsMap: Map<string, databaseExport.ExportedDiagnostic[]> = new Map();
+
+function getCurrentDiagnostics(): databaseExport.ExportedDiagnostic[] {
+    let all: databaseExport.ExportedDiagnostic[] = [];
+    for (let [_, diags] of currentDiagnosticsMap) {
+        all.push(...diags);
+    }
+    return all;
+}
+
 function exportMcpDatabase(): void {
     try {
         databaseExport.writeDatabaseToFile(mcpDatabasePath);
     } catch (e) {
         connection.console.warn("Failed to export MCP database: " + (e instanceof Error ? e.message : String(e)));
     }
+
+    // Also write offline cache to each workspace root
+    let allDiagnostics = getCurrentDiagnostics();
+    for (let cachePath of getOfflineCachePaths()) {
+        try {
+            databaseExport.writeOfflineCache(cachePath, allDiagnostics);
+        } catch (e) {
+            connection.console.warn("Failed to write offline cache to " + cachePath + ": " + (e instanceof Error ? e.message : String(e)));
+        }
+    }
 }
 
 function exportMcpDiagnostics(uri: string, diagnostics: any[]): void {
+    // Update the in-memory map
+    let exported: databaseExport.ExportedDiagnostic[] = [];
+    for (let diag of diagnostics) {
+        exported.push({
+            uri: uri,
+            message: diag.message || "",
+            severity: diag.severity === 1 ? "error" : diag.severity === 2 ? "warning" : "information",
+            line: diag.range?.start?.line || 0,
+            character: diag.range?.start?.character || 0,
+        });
+    }
+    if (exported.length > 0) {
+        currentDiagnosticsMap.set(uri, exported);
+    } else {
+        currentDiagnosticsMap.delete(uri);
+    }
+
+    // Write to temp dir for MCP server
     try {
-        // Read existing diagnostics file and update the entry for this URI
-        let existing = databaseExport.readDiagnosticsFromFile(mcpDiagnosticsPath);
-        let allDiagnostics: databaseExport.ExportedDiagnostic[] = [];
-        if (existing) {
-            allDiagnostics = existing.diagnostics.filter(d => d.uri !== uri);
-        }
-        for (let diag of diagnostics) {
-            allDiagnostics.push({
-                uri: uri,
-                message: diag.message || "",
-                severity: diag.severity === 1 ? "error" : diag.severity === 2 ? "warning" : "information",
-                line: diag.range?.start?.line || 0,
-                character: diag.range?.start?.character || 0,
-            });
-        }
-        databaseExport.writeDiagnosticsToFile(mcpDiagnosticsPath, allDiagnostics);
+        databaseExport.writeDiagnosticsToFile(mcpDiagnosticsPath, getCurrentDiagnostics());
     } catch (e) {
         connection.console.warn("Failed to export MCP diagnostics: " + (e instanceof Error ? e.message : String(e)));
+    }
+
+    // Also update offline cache in workspace roots
+    for (let cachePath of getOfflineCachePaths()) {
+        try {
+            databaseExport.writeOfflineCache(cachePath, getCurrentDiagnostics());
+        } catch (e) {
+            // Silently ignore - cache update is best effort
+        }
     }
 }
 
@@ -353,6 +392,9 @@ connection.onInitialize((_params): InitializeResult => {
 
 
     connection.console.log("Workspace roots: " + Roots);
+
+    // Store workspace roots for offline caching
+    workspaceRoots = Roots.filter((r: any) => r != null) as string[];
 
     //connection.console.log("RootPath: "+RootPath);
     //connection.console.log("RootUri: "+RootUri+" from "+_params.rootUri);
@@ -1154,6 +1196,36 @@ connection.languages.inlineValue.on(function (params : InlineValueParams) : Arra
     return inlinevalues.ProvideInlineValues(asmodule, params.context.stoppedLocation.start);
 });
 
+function TriggerThrottledModuleParse(asmodule : scriptfiles.ASModule)
+{
+    if (!asmodule.parseDelay)
+    {
+        // We don't parse because of didChange more than ten times per second,
+        // so we don't end up with a giant backlog of parses.
+        scriptfiles.ParseModuleAndDependencies(asmodule);
+        if (CanResolveModules() && ParseQueue.length == 0 && LoadQueue.length == 0)
+        {
+            scriptfiles.PostProcessModuleTypesAndDependencies(asmodule);
+            scriptfiles.ResolveModule(asmodule);
+            scriptdiagnostics.UpdateScriptModuleDiagnostics(asmodule);
+        }
+
+        asmodule.parseDelay = setTimeout(function() {
+            asmodule.parseDelay = null;
+
+            if (asmodule.parseAfterDelay)
+            {
+                asmodule.parseAfterDelay = false;
+                TriggerThrottledModuleParse(asmodule);
+            }
+        }, 100);
+    }
+    else
+    {
+        asmodule.parseAfterDelay = true;
+    }
+}
+
 connection.onDidChangeTextDocument((params) => {
     // The content of a text document did change in VSCode.
     // params.uri uniquely identifies the document.
@@ -1168,22 +1240,7 @@ connection.onDidChangeTextDocument((params) => {
     if (!asmodule.loaded)
         scriptfiles.UpdateModuleFromDisk(asmodule);
     scriptfiles.UpdateModuleFromContentChanges(asmodule, params.contentChanges);
-
-    if (!asmodule.queuedParse)
-    {
-        // We don't parse because of didChange more than ten times per second,
-        // so we don't end up with a giant backlog of parses.
-        asmodule.queuedParse = setTimeout(function() {
-            asmodule.queuedParse = null;
-            scriptfiles.ParseModuleAndDependencies(asmodule);
-            if (CanResolveModules() && ParseQueue.length == 0 && LoadQueue.length == 0)
-            {
-                scriptfiles.PostProcessModuleTypesAndDependencies(asmodule);
-                scriptfiles.ResolveModule(asmodule);
-                scriptdiagnostics.UpdateScriptModuleDiagnostics(asmodule);
-            }
-        }, 100);
-    }
+    TriggerThrottledModuleParse(asmodule);
 
     if (asmodule.lastEditStart != -1 && parsedcompletion.GetCompletionSettings().correctFloatLiteralsWhenExpectingDoublePrecision)
     {

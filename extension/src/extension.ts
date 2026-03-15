@@ -25,7 +25,7 @@ const GetAPISearchRequest = new RequestType<any, any[], void>('angelscript/getAP
 export function activate(context: ExtensionContext) {
 
     // The server is implemented in node
-    let serverModule = context.asAbsolutePath(path.join('language-server', 'out', 'server.js'));
+    let serverModule = context.asAbsolutePath(path.join('language-server', 'dist', 'server.js'));
     // The debug options for the server
     let debugOptions = { execArgv: ["--nolazy", "--inspect=6009"] };
 
@@ -189,6 +189,14 @@ export function activate(context: ExtensionContext) {
         });
     context.subscriptions.push(saveAndEditAsset);
 
+    let stopPIE = vscode.commands.registerCommand('angelscript.debugStopPIE',
+        function()
+        {
+            if (vscode.debug.activeDebugSession)
+                vscode.debug.activeDebugSession.customRequest("angelscript/stopPIE");
+        });
+    context.subscriptions.push(stopPIE);
+
     console.log("Done activating angelscript extension");
 
     let apiTree = new ASApiTreeProvider(client);
@@ -219,10 +227,19 @@ function registerMcpServer(context: ExtensionContext): void
             return;
         }
 
-        let mcpServerModule = context.asAbsolutePath(path.join('language-server', 'out', 'mcp-server.js'));
+        let mcpServerModule = context.asAbsolutePath(path.join('language-server', 'dist', 'mcp-server.js'));
         let mcpDataDir = path.join(os.tmpdir(), 'angelscript-mcp');
         let databasePath = path.join(mcpDataDir, 'database.json');
         let diagnosticsPath = path.join(mcpDataDir, 'diagnostics.json');
+
+        // Build offline cache paths from workspace folders
+        let offlineCacheArgs: string[] = [];
+        if (vscode.workspace.workspaceFolders) {
+            for (let folder of vscode.workspace.workspaceFolders) {
+                let cachePath = path.join(folder.uri.fsPath, '.vscode', 'as-language.json');
+                offlineCacheArgs.push('--offline-cache', cachePath);
+            }
+        }
 
         let McpStdioServerDefinition = (vscode as any).McpStdioServerDefinition;
         if (!McpStdioServerDefinition) {
@@ -237,7 +254,7 @@ function registerMcpServer(context: ExtensionContext): void
                         new McpStdioServerDefinition(
                             'Unreal AngelScript',
                             process.execPath,
-                            [mcpServerModule, '--database', databasePath, '--diagnostics', diagnosticsPath]
+                            [mcpServerModule, '--database', databasePath, '--diagnostics', diagnosticsPath, ...offlineCacheArgs]
                         )
                     ];
                 },

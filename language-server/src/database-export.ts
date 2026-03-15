@@ -81,6 +81,16 @@ export interface ExportedDiagnostics {
     diagnostics: ExportedDiagnostic[];
 }
 
+/** Combined format for offline cache in .vscode/as-language.json */
+export interface OfflineCacheData {
+    version: number;
+    exportedAt: string;
+    hasUnrealTypes: boolean;
+    types: ExportedType[];
+    namespaces: ExportedNamespace[];
+    diagnostics: ExportedDiagnostic[];
+}
+
 function exportProperty(prop: typedb.DBProperty): ExportedProperty {
     return {
         name: prop.name,
@@ -226,6 +236,36 @@ export function readDiagnosticsFromFile(filePath: string): ExportedDiagnostics |
             return null;
         let content = fs.readFileSync(filePath, 'utf-8');
         return JSON.parse(content) as ExportedDiagnostics;
+    } catch (e) {
+        return null;
+    }
+}
+
+/** Write combined offline cache to .vscode/as-language.json */
+export function writeOfflineCache(filePath: string, diagnostics: ExportedDiagnostic[]): void {
+    let db = exportDatabase();
+    let data: OfflineCacheData = {
+        version: db.version,
+        exportedAt: db.exportedAt,
+        hasUnrealTypes: db.hasUnrealTypes,
+        types: db.types,
+        namespaces: db.namespaces,
+        diagnostics: diagnostics,
+    };
+    let dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(filePath, JSON.stringify(data), 'utf-8');
+}
+
+/** Read the offline cache file (.vscode/as-language.json) */
+export function readOfflineCache(filePath: string): OfflineCacheData | null {
+    try {
+        if (!fs.existsSync(filePath))
+            return null;
+        let content = fs.readFileSync(filePath, 'utf-8');
+        return JSON.parse(content) as OfflineCacheData;
     } catch (e) {
         return null;
     }
