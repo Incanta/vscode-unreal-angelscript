@@ -46,7 +46,10 @@ import * as inlinevalues from './inline_values';
 import * as colorpicker from './color_picker';
 import * as typehierarchy from './type_hierarchy';
 import * as api_docs from './api_docs';
+import * as databaseExport from './database-export';
 import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import {glob} from 'glob';
 
 import {
@@ -79,6 +82,81 @@ let UnrealTypesTimedOut = false;
 
 let settings : any = null;
 let reconnectTimeoutId : any = undefined;
+
+// MCP data export directory
+let mcpDataDir = path.join(os.tmpdir(), 'angelscript-mcp');
+let mcpDatabasePath = path.join(mcpDataDir, 'database.json');
+let mcpDiagnosticsPath = path.join(mcpDataDir, 'diagnostics.json');
+
+// Workspace roots for offline caching
+let workspaceRoots: string[] = [];
+
+function getOfflineCachePaths(): string[] {
+    return workspaceRoots.map(root => path.join(root, '.vscode', 'as-language.json'));
+}
+
+let currentDiagnosticsMap: Map<string, databaseExport.ExportedDiagnostic[]> = new Map();
+
+function getCurrentDiagnostics(): databaseExport.ExportedDiagnostic[] {
+    let all: databaseExport.ExportedDiagnostic[] = [];
+    for (let [_, diags] of currentDiagnosticsMap) {
+        all.push(...diags);
+    }
+    return all;
+}
+
+function exportMcpDatabase(): void {
+    try {
+        databaseExport.writeDatabaseToFile(mcpDatabasePath);
+    } catch (e) {
+        connection.console.warn("Failed to export MCP database: " + (e instanceof Error ? e.message : String(e)));
+    }
+
+    // Also write offline cache to each workspace root
+    let allDiagnostics = getCurrentDiagnostics();
+    for (let cachePath of getOfflineCachePaths()) {
+        try {
+            databaseExport.writeOfflineCache(cachePath, allDiagnostics);
+        } catch (e) {
+            connection.console.warn("Failed to write offline cache to " + cachePath + ": " + (e instanceof Error ? e.message : String(e)));
+        }
+    }
+}
+
+function exportMcpDiagnostics(uri: string, diagnostics: any[]): void {
+    // Update the in-memory map
+    let exported: databaseExport.ExportedDiagnostic[] = [];
+    for (let diag of diagnostics) {
+        exported.push({
+            uri: uri,
+            message: diag.message || "",
+            severity: diag.severity === 1 ? "error" : diag.severity === 2 ? "warning" : "information",
+            line: diag.range?.start?.line || 0,
+            character: diag.range?.start?.character || 0,
+        });
+    }
+    if (exported.length > 0) {
+        currentDiagnosticsMap.set(uri, exported);
+    } else {
+        currentDiagnosticsMap.delete(uri);
+    }
+
+    // Write to temp dir for MCP server
+    try {
+        databaseExport.writeDiagnosticsToFile(mcpDiagnosticsPath, getCurrentDiagnostics());
+    } catch (e) {
+        connection.console.warn("Failed to export MCP diagnostics: " + (e instanceof Error ? e.message : String(e)));
+    }
+
+    // Also update offline cache in workspace roots
+    for (let cachePath of getOfflineCachePaths()) {
+        try {
+            databaseExport.writeOfflineCache(cachePath, getCurrentDiagnostics());
+        } catch (e) {
+            // Silently ignore - cache update is best effort
+        }
+    }
+}
 
 function connect_unreal()
 {
@@ -175,6 +253,9 @@ function connect_unreal()
 
                 // Make sure no modules are resolved anymore
                 ReResolveAllModules();
+
+                // Export database for MCP server consumption
+                exportMcpDatabase();
             }
             else if(msg.type == MessageType.AssetDatabase)
             {
@@ -312,6 +393,9 @@ connection.onInitialize((_params): InitializeResult => {
 
     connection.console.log("Workspace roots: " + Roots);
 
+    // Store workspace roots for offline caching
+    workspaceRoots = Roots.filter((r: any) => r != null) as string[];
+
     //connection.console.log("RootPath: "+RootPath);
     //connection.console.log("RootUri: "+RootUri+" from "+_params.rootUri);
 
@@ -414,6 +498,9 @@ function DetectUnrealTypeListTimeout()
 
     // Make sure no modules are resolved anymore
     ReResolveAllModules();
+
+    // Export database for MCP server consumption
+    exportMcpDatabase();
 }
 
 function TickQueues()
@@ -588,6 +675,7 @@ function IsInitialParseDone()
 
 scriptdiagnostics.OnDiagnosticsChanged( function (uri : string, diagnostics : Array<Diagnostic>){
     connection.sendDiagnostics({ "uri": uri, "diagnostics": diagnostics });
+    exportMcpDiagnostics(uri, diagnostics);
 });
 
 connection.onDidChangeWatchedFiles((_change) => {

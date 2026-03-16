@@ -5,6 +5,7 @@
 'use strict';
 
 import * as path from 'path';
+import * as os from 'os';
 
 import { workspace, ExtensionContext, TextDocument, Range, InlayHint } from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions, Definition, TransportKind, Diagnostic, RequestType, ExecuteCommandRequest, ExecuteCommandParams, ExecuteCommandRegistrationOptions, TextDocumentPositionParams, ImplementationRequest, TypeDefinitionRequest, TextDocumentItem, NotificationType0 } from 'vscode-languageclient/node';
@@ -211,6 +212,59 @@ export function activate(context: ExtensionContext) {
     {
         apiDetails.showDetails(data);
     });
+
+    // Register MCP server for AI agent integration
+    registerMcpServer(context);
+}
+
+function registerMcpServer(context: ExtensionContext): void
+{
+    try {
+        // Check if the MCP API is available (VS Code 1.99+)
+        let vscodeLm = (vscode as any).lm;
+        if (!vscodeLm || typeof vscodeLm.registerMcpServerDefinitionProvider !== 'function') {
+            console.log("MCP server registration not available in this VS Code version");
+            return;
+        }
+
+        let mcpServerModule = context.asAbsolutePath(path.join('language-server', 'dist', 'mcp-server.js'));
+        let mcpDataDir = path.join(os.tmpdir(), 'angelscript-mcp');
+        let databasePath = path.join(mcpDataDir, 'database.json');
+        let diagnosticsPath = path.join(mcpDataDir, 'diagnostics.json');
+
+        // Build offline cache paths from workspace folders
+        let offlineCacheArgs: string[] = [];
+        if (vscode.workspace.workspaceFolders) {
+            for (let folder of vscode.workspace.workspaceFolders) {
+                let cachePath = path.join(folder.uri.fsPath, '.vscode', 'as-language.json');
+                offlineCacheArgs.push('--offline-cache', cachePath);
+            }
+        }
+
+        let McpStdioServerDefinition = (vscode as any).McpStdioServerDefinition;
+        if (!McpStdioServerDefinition) {
+            console.log("McpStdioServerDefinition not available in this VS Code version");
+            return;
+        }
+
+        context.subscriptions.push(
+            vscodeLm.registerMcpServerDefinitionProvider('angelscript', {
+                provideMcpServerDefinitions: async () => {
+                    return [
+                        new McpStdioServerDefinition(
+                            'Unreal AngelScript',
+                            process.execPath,
+                            [mcpServerModule, '--database', databasePath, '--diagnostics', diagnosticsPath, ...offlineCacheArgs]
+                        )
+                    ];
+                },
+            })
+        );
+
+        console.log("AngelScript MCP server registered");
+    } catch (e) {
+        console.log("Failed to register MCP server: " + (e instanceof Error ? e.message : String(e)));
+    }
 }
 
 class ASApiSearchProvider implements vscode.WebviewViewProvider

@@ -691,6 +691,12 @@
                     ]
                 }
             }
+        ],
+        "mcpServerDefinitionProviders": [
+            {
+                "id": "angelscript",
+                "label": "Unreal AngelScript"
+            }
         ]
     },
     "scripts": {

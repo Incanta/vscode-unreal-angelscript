@@ -27,6 +27,7 @@ async function main() {
 	const ctx = await esbuild.context({
 		entryPoints: [
 			'src/server.ts',
+			'src/mcp-server.ts',
 		],
 		bundle: true,
 		format: 'cjs',
