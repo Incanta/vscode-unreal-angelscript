@@ -908,6 +908,9 @@ function AddScopeSymbols(asmodule : scriptfiles.ASModule, scope : scriptfiles.AS
         else if (scopeFunc.isProtected)
             scopeSymbol.detail = "protected";
 
+        if (scopeFunc.isLatent)
+            scopeSymbol.detail = scopeSymbol.detail ? `${scopeSymbol.detail} latent` : "latent";
+
         if (scopeFunc.moduleScopeEnd != -1)
             scopeSymbol.range = asmodule.getRange(scopeFunc.moduleOffset, scopeFunc.moduleScopeEnd);
         else if (scopeFunc.moduleOffsetEnd != -1)

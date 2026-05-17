@@ -230,6 +230,7 @@ export class DBMethod implements DBSymbol
     documentation : string;
     isProtected : boolean = false;
     isPrivate : boolean = false;
+    isLatent : boolean = false;
     isConstructor : boolean = false;
     isBlueprintEvent : boolean = false;
     isCallable : boolean = true;
@@ -281,6 +282,7 @@ export class DBMethod implements DBSymbol
         inst.argumentStr = this.argumentStr;
         inst.documentation = this.documentation;
         inst.isProtected = this.isProtected;
+        inst.isLatent = this.isLatent;
         inst.isPrivate = this.isPrivate;
         inst.isConstructor = this.isConstructor;
         inst.isBlueprintEvent = this.isBlueprintEvent;
@@ -353,6 +355,11 @@ export class DBMethod implements DBSymbol
             this.isProtected = input['protected'];
         else
             this.isProtected = false;
+
+        if ('latent' in input)
+            this.isLatent = input['latent'];
+        else
+            this.isLatent = false;
 
         if ('defaultsonly' in input)
             this.isDefaultsOnly = input['defaultsonly'];

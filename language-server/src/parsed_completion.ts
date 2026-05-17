@@ -1104,7 +1104,7 @@ function AddCompletionsFromKeywords(context : CompletionContext, completions : A
     }
 
     AddCompletionsFromKeywordList(context, [
-        "auto"
+        "auto", "co_await"
     ], completions);
 
     if (context.isRightExpression || context.isSubExpression)
@@ -1265,7 +1265,7 @@ function AddCompletionsFromKeywords(context : CompletionContext, completions : A
         if (!context.isRightExpression && !context.isSubExpression)
         {
             AddCompletionsFromKeywordList(context, [
-                "override", "final", "property", "private", "protected", "access"
+                "override", "final", "property", "private", "protected", "access", "latent"
             ], completions);
 
             if (CanCompleteToOnlyStart(context, "UPROPERTY"))
@@ -4293,6 +4293,8 @@ function GetDeclarationSnippet(method : typedb.DBMethod, indent : string, includ
         complStr += " override";
     if (!method.isBlueprintEvent && method.isProperty && method.declaredModule)
         complStr += " property";
+    if (method.isLatent)
+        complStr += " latent";
     complStr += "\n";
     return complStr;
 }
@@ -4641,7 +4643,7 @@ function AddCompletionsFromAccessSpecifiers(context : CompletionContext, complet
     {
         // Add completions for relevant keywords
         AddCompletionsFromKeywordList(context, [
-            "private", "protected", "readonly", "editdefaults", "inherited"
+            "private", "protected", "readonly", "editdefaults", "inherited", "latent"
         ], completions);
 
         // Add completions for all types
