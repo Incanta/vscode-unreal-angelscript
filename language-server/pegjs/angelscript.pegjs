@@ -964,6 +964,7 @@ keyword
         / "continue"
         / "case"
         / "const"
+        / "co_await"
     )
     / &"s" @(
         "struct"
@@ -992,6 +993,7 @@ keyword
     )
     / &"l" @(
         "local"
+        / "latent"
     )
     / &"C" @(
         "Cast"
@@ -1151,7 +1153,7 @@ void_type
     = &"v" "void"
     { return null; }
 func_qualifiers
-    = (_ @("const" / "final" / "override" / "property" / (!"from" @identifier_name)))*
+    = (_ @("const" / "final" / "override" / "property" / "latent" / (!"from" @identifier_name)))*
 
 parameter_list
     = params:(

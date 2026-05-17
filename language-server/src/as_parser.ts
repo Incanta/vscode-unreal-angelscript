@@ -50,7 +50,7 @@ export let ASKeywords = [
     "for", "if", "enum", "return", "continue", "break", "import", "class", "struct", "default",
     "void", "const", "delegate", "event", "else", "while", "case", "Cast", "namespace",
     "UFUNCTION", "UPROPERTY", "UCLASS", "USTRUCT", "nullptr", "true", "false", "this", "auto",
-    "final", "property", "override", "mixin", "switch", "fallthrough",
+    "final", "property", "override", "mixin", "switch", "fallthrough", "latent", "co_await",
 ];
 
 export enum ASScopeType
@@ -1677,6 +1677,7 @@ function AddDBMethod(scope : ASScope, funcname : string) : typedb.DBMethod
     dbfunc.documentation = null;
     dbfunc.isPrivate = false;
     dbfunc.isProtected = false;
+    dbfunc.isLatent = false;
     dbfunc.isConstructor = false;
     dbfunc.isConst = false;
     dbfunc.isProperty = false;
@@ -2140,6 +2141,8 @@ function GenerateTypeInformation(scope : ASScope)
                         dbfunc.isFinal = true;
                     else if (qual == "override")
                         dbfunc.isOverride = true;
+                    else if (qual == "latent")
+                        dbfunc.isLatent = true;
                 }
             }
 
