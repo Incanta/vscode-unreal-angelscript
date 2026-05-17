@@ -2,6 +2,11 @@ import * as typedb from './database';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// These interfaces describe the on-disk JSON schema shared with the standalone
+// mcp-server package (see mcp-server/src/cache-format.ts). The two definitions
+// are intentionally duplicated so neither side has to import across packages;
+// they must be kept in sync when the schema changes.
+
 export interface ExportedProperty {
     name: string;
     typename: string;
@@ -67,22 +72,7 @@ export interface ExportedDiagnostic {
     character: number;
 }
 
-export interface ExportedDatabase {
-    version: number;
-    exportedAt: string;
-    hasUnrealTypes: boolean;
-    types: ExportedType[];
-    namespaces: ExportedNamespace[];
-}
-
-export interface ExportedDiagnostics {
-    version: number;
-    exportedAt: string;
-    diagnostics: ExportedDiagnostic[];
-}
-
-/** Combined format for offline cache in .vscode/as-language.json */
-export interface OfflineCacheData {
+export interface LanguageCache {
     version: number;
     exportedAt: string;
     hasUnrealTypes: boolean;
@@ -164,7 +154,7 @@ function exportType(dbtype: typedb.DBType): ExportedType {
     };
 }
 
-export function exportDatabase(): ExportedDatabase {
+export function buildLanguageCache(diagnostics: ExportedDiagnostic[]): LanguageCache {
     let types: ExportedType[] = [];
     let namespaces: ExportedNamespace[] = [];
 
@@ -194,79 +184,15 @@ export function exportDatabase(): ExportedDatabase {
         hasUnrealTypes: typedb.HasTypesFromUnreal(),
         types: types,
         namespaces: namespaces,
-    };
-}
-
-export function writeDatabaseToFile(filePath: string): void {
-    let data = exportDatabase();
-    let dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(filePath, JSON.stringify(data), 'utf-8');
-}
-
-export function writeDiagnosticsToFile(filePath: string, diagnostics: ExportedDiagnostic[]): void {
-    let data: ExportedDiagnostics = {
-        version: 1,
-        exportedAt: new Date().toISOString(),
         diagnostics: diagnostics,
     };
+}
+
+export function writeLanguageCache(filePath: string, diagnostics: ExportedDiagnostic[]): void {
+    let data = buildLanguageCache(diagnostics);
     let dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }
     fs.writeFileSync(filePath, JSON.stringify(data), 'utf-8');
-}
-
-export function readDatabaseFromFile(filePath: string): ExportedDatabase | null {
-    try {
-        if (!fs.existsSync(filePath))
-            return null;
-        let content = fs.readFileSync(filePath, 'utf-8');
-        return JSON.parse(content) as ExportedDatabase;
-    } catch (e) {
-        return null;
-    }
-}
-
-export function readDiagnosticsFromFile(filePath: string): ExportedDiagnostics | null {
-    try {
-        if (!fs.existsSync(filePath))
-            return null;
-        let content = fs.readFileSync(filePath, 'utf-8');
-        return JSON.parse(content) as ExportedDiagnostics;
-    } catch (e) {
-        return null;
-    }
-}
-
-/** Write combined offline cache to .vscode/as-language.json */
-export function writeOfflineCache(filePath: string, diagnostics: ExportedDiagnostic[]): void {
-    let db = exportDatabase();
-    let data: OfflineCacheData = {
-        version: db.version,
-        exportedAt: db.exportedAt,
-        hasUnrealTypes: db.hasUnrealTypes,
-        types: db.types,
-        namespaces: db.namespaces,
-        diagnostics: diagnostics,
-    };
-    let dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(filePath, JSON.stringify(data), 'utf-8');
-}
-
-/** Read the offline cache file (.vscode/as-language.json) */
-export function readOfflineCache(filePath: string): OfflineCacheData | null {
-    try {
-        if (!fs.existsSync(filePath))
-            return null;
-        let content = fs.readFileSync(filePath, 'utf-8');
-        return JSON.parse(content) as OfflineCacheData;
-    } catch (e) {
-        return null;
-    }
 }

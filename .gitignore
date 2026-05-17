@@ -2,3 +2,8 @@ node_modules
 *.vsix
 dist
 out
+
+# Per-workspace live language cache written by the language server while
+# Unreal Editor is connected. The committed offline snapshot
+# (.vscode/as-language.json) is intentionally not ignored here.
+.vscode/as-language.live.json

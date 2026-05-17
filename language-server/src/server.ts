@@ -52,7 +52,6 @@ import * as offlineCheck from './offline_check';
 import * as formatter from './formatter';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import {glob} from 'glob';
 
 import {
@@ -89,16 +88,13 @@ let reconnectTimeoutId : any = undefined;
 // Tracks whether Unreal Editor is actively connected and providing diagnostics
 let unrealIsConnected = false;
 
-// MCP data export directory
-let mcpDataDir = path.join(os.tmpdir(), 'angelscript-mcp');
-let mcpDatabasePath = path.join(mcpDataDir, 'database.json');
-let mcpDiagnosticsPath = path.join(mcpDataDir, 'diagnostics.json');
-
-// Workspace roots for offline caching
+// Workspace roots receive a live language cache file at .vscode/as-language.live.json
+// while Unreal Editor is connected. The MCP server reads this (preferred) or the
+// committed .vscode/as-language.json snapshot. The live file should be gitignored.
 let workspaceRoots: string[] = [];
 
-function getOfflineCachePaths(): string[] {
-    return workspaceRoots.map(root => path.join(root, '.vscode', 'as-language.json'));
+function getLiveCachePaths(): string[] {
+    return workspaceRoots.map(root => path.join(root, '.vscode', 'as-language.live.json'));
 }
 
 let currentDiagnosticsMap: Map<string, databaseExport.ExportedDiagnostic[]> = new Map();
@@ -111,26 +107,22 @@ function getCurrentDiagnostics(): databaseExport.ExportedDiagnostic[] {
     return all;
 }
 
-function exportMcpDatabase(): void {
-    try {
-        databaseExport.writeDatabaseToFile(mcpDatabasePath);
-    } catch (e) {
-        connection.console.warn("Failed to export MCP database: " + (e instanceof Error ? e.message : String(e)));
-    }
-
-    // Also write offline cache to each workspace root
-    let allDiagnostics = getCurrentDiagnostics();
-    for (let cachePath of getOfflineCachePaths()) {
+function writeWorkspaceLanguageCache(): void {
+    let diagnostics = getCurrentDiagnostics();
+    for (let cachePath of getLiveCachePaths()) {
         try {
-            databaseExport.writeOfflineCache(cachePath, allDiagnostics);
+            databaseExport.writeLanguageCache(cachePath, diagnostics);
         } catch (e) {
-            connection.console.warn("Failed to write offline cache to " + cachePath + ": " + (e instanceof Error ? e.message : String(e)));
+            connection.console.warn("Failed to write language cache to " + cachePath + ": " + (e instanceof Error ? e.message : String(e)));
         }
     }
 }
 
+function exportMcpDatabase(): void {
+    writeWorkspaceLanguageCache();
+}
+
 function exportMcpDiagnostics(uri: string, diagnostics: any[]): void {
-    // Update the in-memory map
     let exported: databaseExport.ExportedDiagnostic[] = [];
     for (let diag of diagnostics) {
         exported.push({
@@ -147,21 +139,7 @@ function exportMcpDiagnostics(uri: string, diagnostics: any[]): void {
         currentDiagnosticsMap.delete(uri);
     }
 
-    // Write to temp dir for MCP server
-    try {
-        databaseExport.writeDiagnosticsToFile(mcpDiagnosticsPath, getCurrentDiagnostics());
-    } catch (e) {
-        connection.console.warn("Failed to export MCP diagnostics: " + (e instanceof Error ? e.message : String(e)));
-    }
-
-    // Also update offline cache in workspace roots
-    for (let cachePath of getOfflineCachePaths()) {
-        try {
-            databaseExport.writeOfflineCache(cachePath, getCurrentDiagnostics());
-        } catch (e) {
-            // Silently ignore - cache update is best effort
-        }
-    }
+    writeWorkspaceLanguageCache();
 }
 
 function connect_unreal()

@@ -5,100 +5,53 @@ const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js") as { Mc
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js") as { StdioServerTransport: any };
 const { z } = require("zod") as { z: any };
 import * as fs from 'fs';
+import * as path from 'path';
 
 import {
-    ExportedDatabase,
-    ExportedDiagnostics,
+    LanguageCache,
     ExportedType,
     ExportedMethod,
     ExportedProperty,
-    ExportedDiagnostic,
-    OfflineCacheData,
-    readDatabaseFromFile,
-    readDiagnosticsFromFile,
-    readOfflineCache,
-} from './database-export';
+    readCache,
+    LIVE_CACHE_FILENAME,
+    COMMITTED_CACHE_FILENAME,
+} from './cache-format';
 
-let database: ExportedDatabase | null = null;
-let diagnosticsData: ExportedDiagnostics | null = null;
+let cachePaths: string[] = [];
+let cache: LanguageCache | null = null;
 
-let databasePath: string | null = null;
-let diagnosticsPath: string | null = null;
-let offlineCachePath: string | null = null;
-
-function loadData(): void {
-    // Try the live data files first (written by language server when UE is connected)
-    if (databasePath) {
-        let newDb = readDatabaseFromFile(databasePath);
-        if (newDb) database = newDb;
-    }
-    if (diagnosticsPath) {
-        let newDiag = readDiagnosticsFromFile(diagnosticsPath);
-        if (newDiag) diagnosticsData = newDiag;
-    }
-
-    // Fall back to offline cache if live data not available
-    if (!database && offlineCachePath) {
-        let cached = readOfflineCache(offlineCachePath);
-        if (cached) {
-            database = {
-                version: cached.version,
-                exportedAt: cached.exportedAt,
-                hasUnrealTypes: cached.hasUnrealTypes,
-                types: cached.types,
-                namespaces: cached.namespaces,
-            };
-            if (!diagnosticsData && cached.diagnostics && cached.diagnostics.length > 0) {
-                diagnosticsData = {
-                    version: cached.version,
-                    exportedAt: cached.exportedAt,
-                    diagnostics: cached.diagnostics,
-                };
-            }
+function loadCache(): void {
+    for (let p of cachePaths) {
+        let data = readCache(p);
+        if (data) {
+            cache = data;
+            return;
         }
     }
 }
 
-function watchFiles(): void {
-    if (databasePath && fs.existsSync(databasePath)) {
-        fs.watch(databasePath, () => {
-            let newDb = readDatabaseFromFile(databasePath!);
-            if (newDb) database = newDb;
-        });
-    }
-    if (diagnosticsPath && fs.existsSync(diagnosticsPath)) {
-        fs.watch(diagnosticsPath, () => {
-            let newDiag = readDiagnosticsFromFile(diagnosticsPath!);
-            if (newDiag) diagnosticsData = newDiag;
-        });
-    }
-    if (offlineCachePath && fs.existsSync(offlineCachePath)) {
-        fs.watch(offlineCachePath, () => {
-            let cached = readOfflineCache(offlineCachePath!);
-            if (cached) {
-                database = {
-                    version: cached.version,
-                    exportedAt: cached.exportedAt,
-                    hasUnrealTypes: cached.hasUnrealTypes,
-                    types: cached.types,
-                    namespaces: cached.namespaces,
-                };
-                if (cached.diagnostics && cached.diagnostics.length > 0) {
-                    diagnosticsData = {
-                        version: cached.version,
-                        exportedAt: cached.exportedAt,
-                        diagnostics: cached.diagnostics,
-                    };
+function watchCache(): void {
+    for (let p of cachePaths) {
+        let dir = path.dirname(p);
+        if (!fs.existsSync(dir))
+            continue;
+        try {
+            fs.watch(dir, (_event, filename) => {
+                if (!filename) {
+                    loadCache();
+                    return;
                 }
-            }
-        });
+                if (filename === LIVE_CACHE_FILENAME || filename === COMMITTED_CACHE_FILENAME)
+                    loadCache();
+            });
+        } catch {
+            // best-effort; ignore unwatchable directories
+        }
     }
 }
 
 function matchesFilter(name: string, filter: string): boolean {
-    let filterLower = filter.toLowerCase();
-    let nameLower = name.toLowerCase();
-    return nameLower.includes(filterLower);
+    return name.toLowerCase().includes(filter.toLowerCase());
 }
 
 function formatMethodSignature(method: ExportedMethod): string {
@@ -140,10 +93,9 @@ function formatPropertySignature(prop: ExportedProperty): string {
     return sig;
 }
 
-function truncateResults<T>(arr: T[], limit: number): T[] {
-    if (arr.length > limit) return arr.slice(0, limit);
-    return arr;
-}
+const CACHE_UNAVAILABLE_MESSAGE = "AngelScript language cache not available. Expected one of: " +
+    "<workspace>/.vscode/as-language.live.json (written while Unreal Editor is connected) or " +
+    "<workspace>/.vscode/as-language.json (committed offline snapshot).";
 
 const server = new McpServer({
     name: "angelscript-mcp",
@@ -159,18 +111,16 @@ server.tool(
         limit: z.number().optional().describe("Maximum number of results to return. Default: 50"),
     },
     async ({ query, symbolType, limit }: any) => {
-        loadData();
-        if (!database) {
-            return {
-                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected, or that a cached .vscode/as-language.json file exists in your project." }],
-            };
+        loadCache();
+        if (!cache) {
+            return { content: [{ type: "text", text: CACHE_UNAVAILABLE_MESSAGE }] };
         }
 
         let maxResults = limit || 50;
         let filter = symbolType || "all";
         let results: string[] = [];
 
-        for (let type of database.types) {
+        for (let type of cache.types) {
             if (results.length >= maxResults) break;
 
             if ((filter === "all" || filter === "types") && matchesFilter(type.name, query)) {
@@ -203,9 +153,7 @@ server.tool(
             };
         }
 
-        return {
-            content: [{ type: "text", text: results.join("\n") }],
-        };
+        return { content: [{ type: "text", text: results.join("\n") }] };
     }
 );
 
@@ -216,16 +164,14 @@ server.tool(
         typeName: z.string().describe("The name of the type to look up (e.g., 'AActor', 'FVector', 'UObject')"),
     },
     async ({ typeName }: any) => {
-        loadData();
-        if (!database) {
-            return {
-                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected, or that a cached .vscode/as-language.json file exists in your project." }],
-            };
+        loadCache();
+        if (!cache) {
+            return { content: [{ type: "text", text: CACHE_UNAVAILABLE_MESSAGE }] };
         }
 
         let foundType: ExportedType | null = null;
         let typeNameLower = typeName.toLowerCase();
-        for (let type of database.types) {
+        for (let type of cache.types) {
             if (type.name.toLowerCase() === typeNameLower || type.qualifiedName.toLowerCase() === typeNameLower) {
                 foundType = type;
                 break;
@@ -234,7 +180,7 @@ server.tool(
 
         if (!foundType) {
             let suggestions: string[] = [];
-            for (let type of database.types) {
+            for (let type of cache.types) {
                 if (matchesFilter(type.name, typeName)) {
                     suggestions.push(type.qualifiedName);
                     if (suggestions.length >= 10) break;
@@ -277,9 +223,7 @@ server.tool(
             }
         }
 
-        return {
-            content: [{ type: "text", text: lines.join("\n") }],
-        };
+        return { content: [{ type: "text", text: lines.join("\n") }] };
     }
 );
 
@@ -291,16 +235,14 @@ server.tool(
         filter: z.string().optional().describe("Optional filter to narrow down methods by name"),
     },
     async ({ typeName, filter }: any) => {
-        loadData();
-        if (!database) {
-            return {
-                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected, or that a cached .vscode/as-language.json file exists in your project." }],
-            };
+        loadCache();
+        if (!cache) {
+            return { content: [{ type: "text", text: CACHE_UNAVAILABLE_MESSAGE }] };
         }
 
         let foundType: ExportedType | null = null;
         let typeNameLower = typeName.toLowerCase();
-        for (let type of database.types) {
+        for (let type of cache.types) {
             if (type.name.toLowerCase() === typeNameLower || type.qualifiedName.toLowerCase() === typeNameLower) {
                 foundType = type;
                 break;
@@ -336,9 +278,7 @@ server.tool(
             }
         }
 
-        return {
-            content: [{ type: "text", text: lines.join("\n") }],
-        };
+        return { content: [{ type: "text", text: lines.join("\n") }] };
     }
 );
 
@@ -350,16 +290,14 @@ server.tool(
         filter: z.string().optional().describe("Optional filter to narrow down properties by name"),
     },
     async ({ typeName, filter }: any) => {
-        loadData();
-        if (!database) {
-            return {
-                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected, or that a cached .vscode/as-language.json file exists in your project." }],
-            };
+        loadCache();
+        if (!cache) {
+            return { content: [{ type: "text", text: CACHE_UNAVAILABLE_MESSAGE }] };
         }
 
         let foundType: ExportedType | null = null;
         let typeNameLower = typeName.toLowerCase();
-        for (let type of database.types) {
+        for (let type of cache.types) {
             if (type.name.toLowerCase() === typeNameLower || type.qualifiedName.toLowerCase() === typeNameLower) {
                 foundType = type;
                 break;
@@ -391,9 +329,7 @@ server.tool(
             }
         }
 
-        return {
-            content: [{ type: "text", text: lines.join("\n") }],
-        };
+        return { content: [{ type: "text", text: lines.join("\n") }] };
     }
 );
 
@@ -405,14 +341,12 @@ server.tool(
         severityFilter: z.enum(["all", "error", "warning", "information"]).optional().describe("Filter by severity level. Default: 'all'"),
     },
     async ({ uri, severityFilter }: any) => {
-        loadData();
-        if (!diagnosticsData) {
-            return {
-                content: [{ type: "text", text: "Diagnostics data not available. Make sure the AngelScript language server is running." }],
-            };
+        loadCache();
+        if (!cache) {
+            return { content: [{ type: "text", text: CACHE_UNAVAILABLE_MESSAGE }] };
         }
 
-        let diagnostics = diagnosticsData.diagnostics;
+        let diagnostics = cache.diagnostics || [];
 
         if (uri) {
             let uriLower = uri.toLowerCase();
@@ -439,9 +373,7 @@ server.tool(
             lines.push(`  ${diag.message}`);
         }
 
-        return {
-            content: [{ type: "text", text: lines.join("\n") }],
-        };
+        return { content: [{ type: "text", text: lines.join("\n") }] };
     }
 );
 
@@ -453,17 +385,15 @@ server.tool(
         typeName: z.string().optional().describe("Optional: restrict search to methods of a specific type"),
     },
     async ({ functionName, typeName }: any) => {
-        loadData();
-        if (!database) {
-            return {
-                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected, or that a cached .vscode/as-language.json file exists in your project." }],
-            };
+        loadCache();
+        if (!cache) {
+            return { content: [{ type: "text", text: CACHE_UNAVAILABLE_MESSAGE }] };
         }
 
         let functionNameLower = functionName.toLowerCase();
         let matches: { method: ExportedMethod; ownerName: string }[] = [];
 
-        for (let type of database.types) {
+        for (let type of cache.types) {
             if (typeName) {
                 let typeNameLower = typeName.toLowerCase();
                 if (type.name.toLowerCase() !== typeNameLower && type.qualifiedName.toLowerCase() !== typeNameLower)
@@ -528,9 +458,7 @@ server.tool(
             }
         }
 
-        return {
-            content: [{ type: "text", text: lines.join("\n") }],
-        };
+        return { content: [{ type: "text", text: lines.join("\n") }] };
     }
 );
 
@@ -541,16 +469,14 @@ server.tool(
         typeName: z.string().describe("The name of the type to look up the hierarchy for"),
     },
     async ({ typeName }: any) => {
-        loadData();
-        if (!database) {
-            return {
-                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected, or that a cached .vscode/as-language.json file exists in your project." }],
-            };
+        loadCache();
+        if (!cache) {
+            return { content: [{ type: "text", text: CACHE_UNAVAILABLE_MESSAGE }] };
         }
 
         let foundType: ExportedType | null = null;
         let typeNameLower = typeName.toLowerCase();
-        for (let type of database.types) {
+        for (let type of cache.types) {
             if (type.name.toLowerCase() === typeNameLower || type.qualifiedName.toLowerCase() === typeNameLower) {
                 foundType = type;
                 break;
@@ -563,14 +489,13 @@ server.tool(
 
         let lines: string[] = [];
 
-        // Build superclass chain
         let superChain: string[] = [];
         let currentTypeName = foundType.supertype;
         let visited = new Set<string>();
         while (currentTypeName && !visited.has(currentTypeName)) {
             visited.add(currentTypeName);
             superChain.push(currentTypeName);
-            let parentType = database.types.find(t => t.name === currentTypeName || t.qualifiedName === currentTypeName);
+            let parentType = cache.types.find(t => t.name === currentTypeName || t.qualifiedName === currentTypeName);
             if (parentType) {
                 currentTypeName = parentType.supertype;
             } else {
@@ -589,9 +514,8 @@ server.tool(
             lines.push(`${foundType.qualifiedName} (no superclass)`);
         }
 
-        // Find direct subclasses
         let subclasses: string[] = [];
-        for (let type of database.types) {
+        for (let type of cache.types) {
             if (type.supertype === foundType.name || type.supertype === foundType.qualifiedName) {
                 subclasses.push(type.qualifiedName);
             }
@@ -606,9 +530,7 @@ server.tool(
             }
         }
 
-        return {
-            content: [{ type: "text", text: lines.join("\n") }],
-        };
+        return { content: [{ type: "text", text: lines.join("\n") }] };
     }
 );
 
@@ -621,18 +543,16 @@ server.tool(
         limit: z.number().optional().describe("Maximum number of results. Default: 100"),
     },
     async ({ category, filter, limit }: any) => {
-        loadData();
-        if (!database) {
-            return {
-                content: [{ type: "text", text: "AngelScript database not available. Make sure the Unreal Editor is running and the AngelScript language server is connected, or that a cached .vscode/as-language.json file exists in your project." }],
-            };
+        loadCache();
+        if (!cache) {
+            return { content: [{ type: "text", text: CACHE_UNAVAILABLE_MESSAGE }] };
         }
 
         let maxResults = limit || 100;
         let cat = category || "all";
         let results: string[] = [];
 
-        for (let type of database.types) {
+        for (let type of cache.types) {
             if (results.length >= maxResults) break;
 
             if (cat === "classes" && (type.isEnum || type.isStruct || type.isDelegate || type.isEvent)) continue;
@@ -660,35 +580,40 @@ server.tool(
         if (results.length >= maxResults) header += ` (limited to ${maxResults})`;
         header += ":";
 
-        return {
-            content: [{ type: "text", text: header + "\n\n" + results.join("\n") }],
-        };
+        return { content: [{ type: "text", text: header + "\n\n" + results.join("\n") }] };
     }
 );
 
-async function main(): Promise<void> {
-    // Parse command line arguments
+function resolveCachePaths(): string[] {
     let args = process.argv.slice(2);
+    let workspace: string | null = null;
+    let explicit: string[] = [];
+
     for (let i = 0; i < args.length; i++) {
-        if (args[i] === "--database" && i + 1 < args.length) {
-            databasePath = args[i + 1];
+        if ((args[i] === "--workspace" || args[i] === "-w") && i + 1 < args.length) {
+            workspace = args[i + 1];
             i++;
-        } else if (args[i] === "--diagnostics" && i + 1 < args.length) {
-            diagnosticsPath = args[i + 1];
-            i++;
-        } else if (args[i] === "--offline-cache" && i + 1 < args.length) {
-            offlineCachePath = args[i + 1];
+        } else if (args[i] === "--cache" && i + 1 < args.length) {
+            explicit.push(args[i + 1]);
             i++;
         }
     }
 
-    // Load initial data
-    loadData();
+    if (explicit.length > 0)
+        return explicit;
 
-    // Watch for file changes
-    watchFiles();
+    let root = workspace ? path.resolve(workspace) : process.cwd();
+    return [
+        path.join(root, '.vscode', LIVE_CACHE_FILENAME),
+        path.join(root, '.vscode', COMMITTED_CACHE_FILENAME),
+    ];
+}
 
-    // Start the MCP server with stdio transport
+async function main(): Promise<void> {
+    cachePaths = resolveCachePaths();
+    loadCache();
+    watchCache();
+
     const transport = new StdioServerTransport();
     await server.connect(transport);
 }

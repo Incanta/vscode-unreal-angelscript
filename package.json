@@ -744,23 +744,19 @@
                     ]
                 }
             }
-        ],
-        "mcpServerDefinitionProviders": [
-            {
-                "id": "angelscript",
-                "label": "Unreal AngelScript"
-            }
         ]
     },
     "scripts": {
         "vscode:prepublish": "npm run compile",
-        "compile": "npm run compile:extension && npm run compile:language-server",
+        "compile": "npm run compile:extension && npm run compile:language-server && npm run compile:mcp-server",
         "compile:extension": "cd extension && node esbuild.js",
         "compile:language-server": "cd language-server && node esbuild.js",
+        "compile:mcp-server": "cd mcp-server && node esbuild.js",
         "watch": "npm-run-all -p watch:*",
         "watch:extension": "cd extension && node esbuild.js --watch",
         "watch:language-server": "cd language-server && node esbuild.js --watch",
-        "postinstall": "cd prettier-angelscript && npm install && npm run build && cd ../extension && npm install && cd ../language-server && npm install && cd ..",
+        "watch:mcp-server": "cd mcp-server && node esbuild.js --watch",
+        "postinstall": "cd prettier-angelscript && npm install && npm run build && cd ../extension && npm install && cd ../language-server && npm install && cd ../mcp-server && npm install && cd ..",
         "pegjs:compile": "cd language-server/pegjs && peggy angelscript.pegjs --allowed-start-rules start,start_global,start_class,start_enum",
         "pegjs:test": "cd language-server/pegjs && peggy angelscript.pegjs --allowed-start-rules start,start_global,start_class,start_enum --trace --test-file test.as -S start"
     }

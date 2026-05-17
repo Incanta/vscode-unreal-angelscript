@@ -1,0 +1,30 @@
+{
+    "name": "@incanta/angelscript-mcp",
+    "description": "MCP server exposing Unreal AngelScript symbols and diagnostics from a project's .vscode/ cache.",
+    "version": "1.0.0",
+    "license": "MIT",
+    "engines": {
+        "node": ">=18"
+    },
+    "main": "./dist/index.js",
+    "bin": {
+        "angelscript-mcp": "./dist/index.js"
+    },
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.27.1",
+        "zod": "^3.23.8"
+    },
+    "devDependencies": {
+        "@types/node": "^18.0.0",
+        "esbuild": "^0.27.3",
+        "typescript": "^4.5.5"
+    },
+    "scripts": {
+        "build": "node esbuild.js",
+        "watch": "node esbuild.js --watch"
+    }
+}
