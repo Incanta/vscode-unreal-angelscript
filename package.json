@@ -104,6 +104,44 @@
                     "default": 1000,
                     "description": "Delay in milliseconds after a file change before triggering offline compilation."
                 },
+                "UnrealAngelscript.formatting.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable document formatting via the prettier-plugin-angelscript formatter."
+                },
+                "UnrealAngelscript.formatting.printWidth": {
+                    "type": "number",
+                    "default": 100,
+                    "description": "Prettier print width (line length the formatter tries to wrap at)."
+                },
+                "UnrealAngelscript.formatting.braceStyle": {
+                    "type": "string",
+                    "enum": ["allman", "1tbs"],
+                    "default": "allman",
+                    "description": "Brace placement style. 'allman' puts braces on their own line; '1tbs' keeps them on the same line."
+                },
+                "UnrealAngelscript.formatting.quoteStyle": {
+                    "type": "string",
+                    "enum": ["double", "single", "preserve"],
+                    "default": "double",
+                    "description": "String literal quote style used by the formatter."
+                },
+                "UnrealAngelscript.formatting.metadataPerLine": {
+                    "type": "string",
+                    "enum": ["auto", "always", "never", "fit"],
+                    "default": "auto",
+                    "description": "How Unreal metadata (UCLASS/UFUNCTION/UPROPERTY) attributes are broken onto separate lines."
+                },
+                "UnrealAngelscript.formatting.alignConsecutiveDeclarations": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Align names of consecutive property declarations when formatting."
+                },
+                "UnrealAngelscript.formatting.spaceInsideAngleBrackets": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Emit `array< T >` instead of `array<T>` when formatting templated types."
+                },
                 "UnrealAngelscript.inlayHints.inlayHintsEnabled": {
                     "type": "boolean",
                     "default": true,
@@ -722,7 +760,7 @@
         "watch": "npm-run-all -p watch:*",
         "watch:extension": "cd extension && node esbuild.js --watch",
         "watch:language-server": "cd language-server && node esbuild.js --watch",
-        "postinstall": "cd extension && npm install && cd ../language-server && npm install && cd ..",
+        "postinstall": "cd prettier-angelscript && npm install && npm run build && cd ../extension && npm install && cd ../language-server && npm install && cd ..",
         "pegjs:compile": "cd language-server/pegjs && peggy angelscript.pegjs --allowed-start-rules start,start_global,start_class,start_enum",
         "pegjs:test": "cd language-server/pegjs && peggy angelscript.pegjs --allowed-start-rules start,start_global,start_class,start_enum --trace --test-file test.as -S start"
     }

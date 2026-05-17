@@ -1,0 +1,3 @@
+[submodule "prettier-angelscript"]
+	path = prettier-angelscript
+	url = git@github.com:Incanta/prettier-angelscript.git

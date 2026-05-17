@@ -23,6 +23,7 @@ import {
     InlayHint, InlayHintParams,
     InlineValue, InlineValueParams,
     NotificationType0,
+    DocumentFormattingParams,
 } from 'vscode-languageserver/node';
 import { TextDocument, TextDocumentContentChangeEvent } from 'vscode-languageserver-textdocument';
 
@@ -48,6 +49,7 @@ import * as typehierarchy from './type_hierarchy';
 import * as api_docs from './api_docs';
 import * as databaseExport from './database-export';
 import * as offlineCheck from './offline_check';
+import * as formatter from './formatter';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -419,6 +421,16 @@ connection.onInitialize((_params): InitializeResult => {
         workspaceRoots
     );
 
+    formatter.configure({
+        enabled: settings?.formatting?.enabled !== false,
+        printWidth: settings?.formatting?.printWidth,
+        braceStyle: settings?.formatting?.braceStyle,
+        quoteStyle: settings?.formatting?.quoteStyle,
+        metadataPerLine: settings?.formatting?.metadataPerLine,
+        alignConsecutiveDeclarations: settings?.formatting?.alignConsecutiveDeclarations,
+        spaceInsideAngleBrackets: settings?.formatting?.spaceInsideAngleBrackets,
+    });
+
     //connection.console.log("RootPath: "+RootPath);
     //connection.console.log("RootUri: "+RootUri+" from "+_params.rootUri);
 
@@ -503,6 +515,7 @@ connection.onInitialize((_params): InitializeResult => {
                 documentSelector: null,
             },
             typeHierarchyProvider: true,
+            documentFormattingProvider: true,
         }
     }
 });
@@ -1009,6 +1022,48 @@ connection.onCodeActionResolve(function (action : CodeAction) : CodeAction
     return scriptactions.ResolveCodeAction(asmodule, action, data);
 });
 
+connection.onDocumentFormatting(async function (params : DocumentFormattingParams) : Promise<TextEdit[]>
+{
+    if (!formatter.isEnabled())
+        return [];
+
+    let asmodule = scriptfiles.GetModuleByUri(params.textDocument.uri);
+    if (!asmodule || asmodule.content == null)
+        return [];
+
+    let original = asmodule.content;
+    let formatted: string;
+    try {
+        formatted = await formatter.formatText({
+            text: original,
+            tabSize: params.options.tabSize,
+            insertSpaces: params.options.insertSpaces,
+            filepath: URI.parse(params.textDocument.uri).fsPath,
+        });
+    } catch (e) {
+        connection.console.warn("AngelScript formatter failed: " + (e instanceof Error ? e.message : String(e)));
+        return [];
+    }
+
+    if (formatted === original)
+        return [];
+
+    let endLine = 0;
+    let lastLineStart = 0;
+    for (let i = 0; i < original.length; ++i) {
+        if (original.charCodeAt(i) === 10) {
+            endLine += 1;
+            lastLineStart = i + 1;
+        }
+    }
+    let endChar = original.length - lastLineStart;
+
+    return [TextEdit.replace(
+        Range.create(Position.create(0, 0), Position.create(endLine, endChar)),
+        formatted
+    )];
+});
+
 function ReplaceScriptAssetDefinition(assetName : string, assetContent : Array<string>)
 {
     // Find the literal asset
@@ -1362,6 +1417,18 @@ connection.onDidChangeConfiguration(function (change : DidChangeConfigurationPar
             enabled: settings.offlineCheck.enabled !== false,
             asCheckPath: settings.offlineCheck.asCheckPath || "",
             debounceMs: settings.offlineCheck.debounceMs || 1000,
+        });
+    }
+
+    if (settings.formatting) {
+        formatter.configure({
+            enabled: settings.formatting.enabled !== false,
+            printWidth: settings.formatting.printWidth,
+            braceStyle: settings.formatting.braceStyle,
+            quoteStyle: settings.formatting.quoteStyle,
+            metadataPerLine: settings.formatting.metadataPerLine,
+            alignConsecutiveDeclarations: settings.formatting.alignConsecutiveDeclarations,
+            spaceInsideAngleBrackets: settings.formatting.spaceInsideAngleBrackets,
         });
     }
 
