@@ -47,6 +47,7 @@ import * as colorpicker from './color_picker';
 import * as typehierarchy from './type_hierarchy';
 import * as api_docs from './api_docs';
 import * as databaseExport from './database-export';
+import * as offlineCheck from './offline_check';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -82,6 +83,9 @@ let UnrealTypesTimedOut = false;
 
 let settings : any = null;
 let reconnectTimeoutId : any = undefined;
+
+// Tracks whether Unreal Editor is actively connected and providing diagnostics
+let unrealIsConnected = false;
 
 // MCP data export directory
 let mcpDataDir = path.join(os.tmpdir(), 'angelscript-mcp');
@@ -327,6 +331,7 @@ function connect_unreal()
         // connection.console.log('Reconnecting to unreal due to error');
         if (unreal != null)
         {
+            unrealIsConnected = false;
             unreal.destroy();
             unreal = null;
             if (!reconnectTimeoutId)
@@ -338,6 +343,7 @@ function connect_unreal()
         // connection.console.log('Ceconnecting to unreal due to close');
         if (unreal != null)
         {
+            unrealIsConnected = false;
             unreal.destroy();
             unreal = null;
             if (!reconnectTimeoutId)
@@ -348,6 +354,13 @@ function connect_unreal()
     unreal.connect(port, hostname, function()
     {
         // connection.console.log('Connection to unreal editor established.');
+        unrealIsConnected = true;
+
+        // Clear offline diagnostics — Unreal will provide real compilation results
+        offlineCheck.clearDiagnostics(function(uri: string, diagnostics: Diagnostic[]) {
+            scriptdiagnostics.UpdateCompileDiagnostics(uri, diagnostics);
+        });
+
         setTimeout(function()
         {
             if (!unreal)
@@ -395,6 +408,16 @@ connection.onInitialize((_params): InitializeResult => {
 
     // Store workspace roots for offline caching
     workspaceRoots = Roots.filter((r: any) => r != null) as string[];
+
+    // Initialize offline check with workspace roots and initial settings
+    offlineCheck.configure(
+        {
+            enabled: settings?.offlineCheck?.enabled !== false,
+            asCheckPath: settings?.offlineCheck?.asCheckPath || "",
+            debounceMs: settings?.offlineCheck?.debounceMs || 1000,
+        },
+        workspaceRoots
+    );
 
     //connection.console.log("RootPath: "+RootPath);
     //connection.console.log("RootUri: "+RootUri+" from "+_params.rootUri);
@@ -678,6 +701,19 @@ scriptdiagnostics.OnDiagnosticsChanged( function (uri : string, diagnostics : Ar
     exportMcpDiagnostics(uri, diagnostics);
 });
 
+// Offline compilation: trigger as-check when Unreal is not connected
+function triggerOfflineCheck() {
+    if (unrealIsConnected) return;
+    offlineCheck.triggerCheck(
+        function(uri: string, diagnostics: Diagnostic[]) {
+            scriptdiagnostics.UpdateCompileDiagnostics(uri, diagnostics);
+        },
+        function(message: string) {
+            connection.console.log(message);
+        }
+    );
+}
+
 connection.onDidChangeWatchedFiles((_change) => {
     for(let change of _change.changes)
     {
@@ -703,6 +739,9 @@ connection.onDidChangeWatchedFiles((_change) => {
             }
         }
     }
+
+    // Trigger offline check after processing file changes
+    triggerOfflineCheck();
 });
 
 function GetAndParseModule(uri : string) : scriptfiles.ASModule
@@ -1255,6 +1294,9 @@ connection.onDidChangeTextDocument((params) => {
                 });
         }
     }
+
+    // Trigger offline check on content changes (debounced)
+    triggerOfflineCheck();
 });
 
 connection.onDidOpenTextDocument(function (params : DidOpenTextDocumentParams)
@@ -1312,6 +1354,15 @@ connection.onDidChangeConfiguration(function (change : DidChangeConfigurationPar
 
         // If the port has changed, reconnect
         connect_unreal();
+    }
+
+    // Update offline check settings
+    if (settings.offlineCheck) {
+        offlineCheck.updateSettings({
+            enabled: settings.offlineCheck.enabled !== false,
+            asCheckPath: settings.offlineCheck.asCheckPath || "",
+            debounceMs: settings.offlineCheck.debounceMs || 1000,
+        });
     }
 
     let completionSettings = parsedcompletion.GetCompletionSettings();

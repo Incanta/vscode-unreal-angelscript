@@ -89,6 +89,21 @@
                     "default": 27099,
                     "description": "What port to use when connecting to the Unreal engine game or editor instance for auto-completion and debugging. Must match the debug port configured in the Unreal Engine project settings, or as a launch argument (-asdebugport=)."
                 },
+                "UnrealAngelscript.offlineCheck.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Run offline syntax checking with as-check when Unreal Editor is not connected. Automatically disabled while Unreal provides real compilation diagnostics."
+                },
+                "UnrealAngelscript.offlineCheck.asCheckPath": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Path to the as-check binary. If empty, offline checking is disabled."
+                },
+                "UnrealAngelscript.offlineCheck.debounceMs": {
+                    "type": "number",
+                    "default": 1000,
+                    "description": "Delay in milliseconds after a file change before triggering offline compilation."
+                },
                 "UnrealAngelscript.inlayHints.inlayHintsEnabled": {
                     "type": "boolean",
                     "default": true,
