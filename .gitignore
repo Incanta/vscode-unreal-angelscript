@@ -3,6 +3,16 @@ node_modules
 dist
 out
 
+# Yarn 4 (node-modules linker) — keep .yarnrc.yml, ignore caches/state
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
+.yarn/install-state.gz
+
 # Per-workspace live language cache written by the language server while
 # Unreal Editor is connected. The committed offline snapshot
 # (.vscode/as-language.json) is intentionally not ignored here.

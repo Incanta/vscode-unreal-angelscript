@@ -4,6 +4,13 @@
     "description": "Language Server and Debug Adapter for use with the UnrealEngine-Angelscript plugin from https://github.com/Hazelight/UnrealEngine-Angelscript",
     "version": "1.9.2",
     "publisher": "Hazelight",
+    "private": true,
+    "packageManager": "yarn@4.5.0",
+    "workspaces": [
+        "extension",
+        "language-server",
+        "mcp-server"
+    ],
     "icon": "resources/angelscript_unreal.png",
     "engines": {
         "vscode": "^1.65.0"
@@ -116,19 +123,31 @@
                 },
                 "UnrealAngelscript.formatting.braceStyle": {
                     "type": "string",
-                    "enum": ["allman", "1tbs"],
+                    "enum": [
+                        "allman",
+                        "1tbs"
+                    ],
                     "default": "allman",
                     "description": "Brace placement style. 'allman' puts braces on their own line; '1tbs' keeps them on the same line."
                 },
                 "UnrealAngelscript.formatting.quoteStyle": {
                     "type": "string",
-                    "enum": ["double", "single", "preserve"],
+                    "enum": [
+                        "double",
+                        "single",
+                        "preserve"
+                    ],
                     "default": "double",
                     "description": "String literal quote style used by the formatter."
                 },
                 "UnrealAngelscript.formatting.metadataPerLine": {
                     "type": "string",
-                    "enum": ["auto", "always", "never", "fit"],
+                    "enum": [
+                        "auto",
+                        "always",
+                        "never",
+                        "fit"
+                    ],
                     "default": "auto",
                     "description": "How Unreal metadata (UCLASS/UFUNCTION/UPROPERTY) attributes are broken onto separate lines."
                 },
@@ -747,8 +766,9 @@
         ]
     },
     "scripts": {
-        "vscode:prepublish": "npm run compile",
-        "compile": "npm run compile:extension && npm run compile:language-server && npm run compile:mcp-server",
+        "vscode:prepublish": "yarn run compile",
+        "compile": "yarn run compile:prettier-plugin && yarn run compile:extension && yarn run compile:language-server && yarn run compile:mcp-server",
+        "compile:prettier-plugin": "cd prettier-angelscript && yarn install && yarn build",
         "compile:extension": "cd extension && node esbuild.js",
         "compile:language-server": "cd language-server && node esbuild.js",
         "compile:mcp-server": "cd mcp-server && node esbuild.js",
@@ -756,8 +776,11 @@
         "watch:extension": "cd extension && node esbuild.js --watch",
         "watch:language-server": "cd language-server && node esbuild.js --watch",
         "watch:mcp-server": "cd mcp-server && node esbuild.js --watch",
-        "postinstall": "cd prettier-angelscript && npm install && npm run build && cd ../extension && npm install && cd ../language-server && npm install && cd ../mcp-server && npm install && cd ..",
+        "postinstall": "yarn run compile:prettier-plugin",
         "pegjs:compile": "cd language-server/pegjs && peggy angelscript.pegjs --allowed-start-rules start,start_global,start_class,start_enum",
         "pegjs:test": "cd language-server/pegjs && peggy angelscript.pegjs --allowed-start-rules start,start_global,start_class,start_enum --trace --test-file test.as -S start"
+    },
+    "devDependencies": {
+        "npm-run-all": "^4.1.5"
     }
 }

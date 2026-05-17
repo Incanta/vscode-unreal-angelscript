@@ -1,8 +1,8 @@
 {
-    "name": "lsp-sample-server",
-    "description": "Example implementation of a language server in node.",
+    "name": "unreal-angelscript-language-server",
+    "private": true,
+    "description": "Language server for the Unreal AngelScript VS Code extension.",
     "version": "1.0.0",
-    "author": "Microsoft Corporation",
     "license": "MIT",
     "engines": {
         "node": "*"
@@ -17,7 +17,7 @@
         "glob": "^7.1.3",
         "moo": "^0.5.1",
         "prettier": "^3.6.2",
-        "prettier-plugin-angelscript": "file:../prettier-angelscript",
+        "prettier-plugin-angelscript": "portal:../prettier-angelscript",
         "vscode-languageserver": "^8.1.0",
         "vscode-languageserver-textdocument": "^1.0.8",
         "vscode-uri": "^3.0.3"
@@ -26,6 +26,5 @@
         "@types/vscode": "^1.65.0",
         "typescript": "^4.5.5",
         "vscode-test": "^1.3.0"
-    },
-    "scripts": {}
+    }
 }

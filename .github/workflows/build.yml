@@ -22,14 +22,17 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Enable Corepack
+        run: corepack enable
+
       - name: Install dependencies
-        run: npm install
+        run: yarn install --immutable
 
       - name: Compile
-        run: npm run compile
+        run: yarn run compile
 
       - name: Package VSIX
-        run: npx --yes @vscode/vsce package --no-dependencies --out unreal-angelscript-${{ github.sha }}.vsix
+        run: yarn dlx @vscode/vsce package --no-dependencies --out unreal-angelscript-${{ github.sha }}.vsix
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4

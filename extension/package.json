@@ -1,5 +1,6 @@
 {
-    "name": "unreal-angelscript",
+    "name": "unreal-angelscript-extension",
+    "private": true,
     "displayName": "Unreal Angelscript",
     "description": "Implements support for unreal-bound angelscript files.",
     "version": "0.0.1",

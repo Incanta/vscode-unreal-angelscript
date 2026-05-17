@@ -7,9 +7,7 @@
         "node": ">=18"
     },
     "main": "./dist/index.js",
-    "bin": {
-        "angelscript-mcp": "./dist/index.js"
-    },
+    "bin": "./dist/index.js",
     "files": [
         "dist",
         "README.md"
