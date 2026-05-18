@@ -36,6 +36,16 @@ async function main() {
 		platform: 'node',
 		outdir: 'dist',
 		external: ['vscode'],
+		// Prettier 3's ESM entry calls createRequire(import.meta.url); when
+		// bundled into CJS, esbuild stubs import.meta to {}, which makes
+		// createRequire(undefined) throw at module load. Point it at the
+		// bundled file's own location so it (and fileURLToPath) get a valid URL.
+		banner: {
+			js: 'const __IMPORT_META_URL__ = require("url").pathToFileURL(__filename).href;',
+		},
+		define: {
+			'import.meta.url': '__IMPORT_META_URL__',
+		},
 		logLevel: 'silent',
 		plugins: [
 			/* add to the end of plugins array */
