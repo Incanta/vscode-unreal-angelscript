@@ -18,6 +18,9 @@ export interface ASSettings
     exposeGlobalFunctions: boolean,
     deprecateActorGenerics: boolean,
     disallowActorGenerics: boolean,
+    useScriptNameForBlueprintLibraryNamespaces: boolean,
+    blueprintLibraryNamespacePrefixesToStrip: string[],
+    blueprintLibraryNamespaceSuffixesToStrip: string[],
 };
 
 let ScriptSettings : ASSettings = {
@@ -29,6 +32,9 @@ let ScriptSettings : ASSettings = {
     exposeGlobalFunctions: true,
     deprecateActorGenerics: false,
     disallowActorGenerics: false,
+    useScriptNameForBlueprintLibraryNamespaces: true,
+    blueprintLibraryNamespacePrefixesToStrip: [],
+    blueprintLibraryNamespaceSuffixesToStrip: [],
 };
 
 let PreParsedIdentifiersInModules = new Map<string, Set<ASModule>>();

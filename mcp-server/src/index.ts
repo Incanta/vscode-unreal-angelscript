@@ -9,6 +9,7 @@ import * as path from 'path';
 
 import {
     LanguageCache,
+    NamingConventions,
     ExportedType,
     ExportedMethod,
     ExportedProperty,
@@ -97,10 +98,91 @@ const CACHE_UNAVAILABLE_MESSAGE = "AngelScript language cache not available. Exp
     "<workspace>/.vscode/as-language.live.json (written while Unreal Editor is connected) or " +
     "<workspace>/.vscode/as-language.json (committed offline snapshot).";
 
+function formatNamingConventions(conventions: NamingConventions | undefined): string {
+    let lines: string[] = [];
+    lines.push("# AngelScript naming conventions");
+    lines.push("");
+    lines.push("These rules apply to Unreal AngelScript code. Apply them when writing new code; the symbol database returned by other tools already reflects them.");
+    lines.push("");
+
+    lines.push("## StaticClass()");
+    if (!conventions) {
+        lines.push("- Status unknown (no naming-conventions block in the language cache; cache may predate v2 or Unreal was never connected). Assume `MyClass::StaticClass()` is discouraged and prefer the bare class name.");
+    } else if (conventions.staticClassDisallowed) {
+        lines.push("- DISALLOWED. `MyClass::StaticClass()` is a hard error in this project. Use the bare class name (`MyClass`) wherever a `UClass*` is expected.");
+    } else if (conventions.staticClassDeprecated) {
+        lines.push("- DEPRECATED. `MyClass::StaticClass()` emits a deprecation diagnostic. Use the bare class name (`MyClass`) wherever a `UClass*` is expected.");
+    } else {
+        lines.push("- Allowed, but the bare class name (`MyClass`) is still the idiomatic form when a `UClass*` is expected.");
+    }
+    lines.push("");
+
+    lines.push("## Blueprint function library namespaces");
+    if (!conventions) {
+        lines.push("- Strip rules unknown. Search the symbol database (`angelscript_search_symbols`) for the actual exported namespace before guessing.");
+    } else {
+        if (conventions.useScriptNameForBlueprintLibraryNamespaces) {
+            lines.push("- Libraries that declare a `ScriptName` meta tag are exposed under that name. Otherwise the C++ class name is transformed by the strip rules below.");
+        } else {
+            lines.push("- `ScriptName` meta tags are ignored for libraries. The C++ class name is transformed by the strip rules below.");
+        }
+
+        if (conventions.blueprintLibraryNamespacePrefixesToStrip.length > 0) {
+            lines.push("- Prefixes stripped from the UCLASS name: " + conventions.blueprintLibraryNamespacePrefixesToStrip.map(p => `\`${p}\``).join(", "));
+        } else {
+            lines.push("- No prefixes are stripped.");
+        }
+
+        if (conventions.blueprintLibraryNamespaceSuffixesToStrip.length > 0) {
+            lines.push("- Suffixes stripped from the UCLASS name: " + conventions.blueprintLibraryNamespaceSuffixesToStrip.map(s => `\`${s}\``).join(", "));
+        } else {
+            lines.push("- No suffixes are stripped.");
+        }
+
+        lines.push("");
+        lines.push("Example: with the rules above, `UKismetSystemLibrary::PrintString(...)` is called from AngelScript as `" +
+            applyStripExample(conventions, "UKismetSystemLibrary") + "::PrintString(...)`.");
+        lines.push("");
+        lines.push("When in doubt about the AngelScript-facing name, look it up with `angelscript_search_symbols` or `angelscript_list_types`.");
+    }
+
+    return lines.join("\n");
+}
+
+function applyStripExample(conventions: NamingConventions, className: string): string {
+    let name = className;
+    for (let prefix of conventions.blueprintLibraryNamespacePrefixesToStrip) {
+        if (name.startsWith(prefix)) {
+            name = name.slice(prefix.length);
+            break;
+        }
+    }
+    for (let suffix of conventions.blueprintLibraryNamespaceSuffixesToStrip) {
+        if (name.endsWith(suffix)) {
+            name = name.slice(0, -suffix.length);
+            break;
+        }
+    }
+    return name || className;
+}
+
 const server = new McpServer({
     name: "angelscript-mcp",
     version: "1.0.0",
 });
+
+server.tool(
+    "angelscript_get_naming_conventions",
+    "Get the AngelScript naming conventions for this project. Call this BEFORE writing AngelScript code, especially when referencing UClass values (e.g., `MyClass::StaticClass()` may be deprecated) or Blueprint function library namespaces (the C++ class name is transformed; e.g., `UKismetSystemLibrary` becomes `SystemLibrary` or `System` depending on settings). Returns a short rules sheet derived from the Unreal project's settings.",
+    {},
+    async () => {
+        loadCache();
+        if (!cache) {
+            return { content: [{ type: "text", text: CACHE_UNAVAILABLE_MESSAGE }] };
+        }
+        return { content: [{ type: "text", text: formatNamingConventions(cache.namingConventions) }] };
+    }
+);
 
 server.tool(
     "angelscript_search_symbols",

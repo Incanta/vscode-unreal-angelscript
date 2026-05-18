@@ -293,6 +293,22 @@ function connect_unreal()
                     scriptSettings.deprecateActorGenerics = msg.readBool();
                     scriptSettings.disallowActorGenerics = msg.readBool();
                 }
+                if (version >= 8)
+                {
+                    scriptSettings.useScriptNameForBlueprintLibraryNamespaces = msg.readBool();
+
+                    let prefixCount = msg.readInt();
+                    let prefixes: string[] = [];
+                    for (let i = 0; i < prefixCount; ++i)
+                        prefixes.push(msg.readString());
+                    scriptSettings.blueprintLibraryNamespacePrefixesToStrip = prefixes;
+
+                    let suffixCount = msg.readInt();
+                    let suffixes: string[] = [];
+                    for (let i = 0; i < suffixCount; ++i)
+                        suffixes.push(msg.readString());
+                    scriptSettings.blueprintLibraryNamespaceSuffixesToStrip = suffixes;
+                }
             }
             else if(msg.type == MessageType.ReplaceAssetDefinition)
             {

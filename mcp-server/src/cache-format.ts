@@ -66,6 +66,24 @@ export interface ExportedDiagnostic {
     character: number;
 }
 
+/**
+ * Naming rules sourced from UAngelscriptSettings (Unreal). The exported `types`
+ * already use the AngelScript-facing names, but agents generating new code from
+ * scratch need these rules to derive correct namespace names themselves.
+ */
+export interface NamingConventions {
+    /** True if `MyClass::StaticClass()` emits a deprecation diagnostic. */
+    staticClassDeprecated: boolean;
+    /** True if `MyClass::StaticClass()` is a hard error. */
+    staticClassDisallowed: boolean;
+    /** When true, Blueprint function libraries are named via their ScriptName meta tag. */
+    useScriptNameForBlueprintLibraryNamespaces: boolean;
+    /** Prefixes stripped from a UCLASS name to form its AngelScript namespace (e.g. "UKismet"). */
+    blueprintLibraryNamespacePrefixesToStrip: string[];
+    /** Suffixes stripped from a UCLASS name to form its AngelScript namespace (e.g. "Library"). */
+    blueprintLibraryNamespaceSuffixesToStrip: string[];
+}
+
 /** Combined snapshot format shared between the live cache and the committed offline cache. */
 export interface LanguageCache {
     version: number;
@@ -74,6 +92,8 @@ export interface LanguageCache {
     types: ExportedType[];
     namespaces: ExportedNamespace[];
     diagnostics: ExportedDiagnostic[];
+    /** Present when the data came from a connected Unreal Editor (v8+); absent in older snapshots. */
+    namingConventions?: NamingConventions;
 }
 
 export const LIVE_CACHE_FILENAME = 'as-language.live.json';

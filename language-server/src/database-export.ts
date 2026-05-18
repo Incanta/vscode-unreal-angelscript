@@ -1,4 +1,5 @@
 import * as typedb from './database';
+import * as scriptfiles from './as_parser';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -72,6 +73,14 @@ export interface ExportedDiagnostic {
     character: number;
 }
 
+export interface NamingConventions {
+    staticClassDeprecated: boolean;
+    staticClassDisallowed: boolean;
+    useScriptNameForBlueprintLibraryNamespaces: boolean;
+    blueprintLibraryNamespacePrefixesToStrip: string[];
+    blueprintLibraryNamespaceSuffixesToStrip: string[];
+}
+
 export interface LanguageCache {
     version: number;
     exportedAt: string;
@@ -79,6 +88,7 @@ export interface LanguageCache {
     types: ExportedType[];
     namespaces: ExportedNamespace[];
     diagnostics: ExportedDiagnostic[];
+    namingConventions?: NamingConventions;
 }
 
 function exportProperty(prop: typedb.DBProperty): ExportedProperty {
@@ -178,13 +188,23 @@ export function buildLanguageCache(diagnostics: ExportedDiagnostic[]): LanguageC
         });
     }
 
+    let settings = scriptfiles.GetScriptSettings();
+    let namingConventions: NamingConventions = {
+        staticClassDeprecated: settings.deprecateStaticClass,
+        staticClassDisallowed: settings.disallowStaticClass,
+        useScriptNameForBlueprintLibraryNamespaces: settings.useScriptNameForBlueprintLibraryNamespaces,
+        blueprintLibraryNamespacePrefixesToStrip: settings.blueprintLibraryNamespacePrefixesToStrip,
+        blueprintLibraryNamespaceSuffixesToStrip: settings.blueprintLibraryNamespaceSuffixesToStrip,
+    };
+
     return {
-        version: 1,
+        version: 2,
         exportedAt: new Date().toISOString(),
         hasUnrealTypes: typedb.HasTypesFromUnreal(),
         types: types,
         namespaces: namespaces,
         diagnostics: diagnostics,
+        namingConventions: namingConventions,
     };
 }
 
