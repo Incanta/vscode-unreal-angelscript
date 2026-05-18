@@ -83,6 +83,17 @@ export function activate(context: ExtensionContext) {
 
     context.subscriptions.push(goToSymbol);
 
+    let restartLanguageServer = vscode.commands.registerCommand('angelscript.restartLanguageServer', async () => {
+        try {
+            await client.restart();
+            vscode.window.showInformationMessage("Angelscript language server restarted.");
+        } catch (e) {
+            vscode.window.showErrorMessage("Failed to restart Angelscript language server: " + (e instanceof Error ? e.message : String(e)));
+        }
+    });
+
+    context.subscriptions.push(restartLanguageServer);
+
     let completionParen = vscode.commands.registerCommand('angelscript.paren', () =>
     {
         let activeEditor = vscode.window.activeTextEditor;
