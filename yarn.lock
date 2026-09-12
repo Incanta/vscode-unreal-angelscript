@@ -243,6 +243,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@peggyjs/from-mem@npm:3.1.3":
+  version: 3.1.3
+  resolution: "@peggyjs/from-mem@npm:3.1.3"
+  dependencies:
+    semver: "npm:7.7.4"
+  checksum: 10c0/c4d876bad432a4aca7e6735ae5bcb939fc5be0300f0cf35c8791ce4df08a77fdc4b56c2b29e3374932f45bdfdf7cc602203a942bd00c488c3e4fa8bb19f682f3
+  languageName: node
+  linkType: hard
+
 "@tootallnate/once@npm:1":
   version: 1.1.2
   resolution: "@tootallnate/once@npm:1.1.2"
@@ -554,6 +563,13 @@ __metadata:
   version: 1.1.3
   resolution: "color-name@npm:1.1.3"
   checksum: 10c0/566a3d42cca25b9b3cd5528cd7754b8e89c0eb646b7f214e8e2eaddb69994ac5f0557d9c175eb5d8f0ad73531140d9c47525085ee752a91a2ab15ab459caf6d6
+  languageName: node
+  linkType: hard
+
+"commander@npm:^14.0.3":
+  version: 14.0.3
+  resolution: "commander@npm:14.0.3"
+  checksum: 10c0/755652564bbf56ff2ff083313912b326450d3f8d8c85f4b71416539c9a05c3c67dbd206821ca72635bf6b160e2afdefcb458e86b317827d5cb333b69ce7f1a24
   languageName: node
   linkType: hard
 
@@ -1946,6 +1962,19 @@ __metadata:
   languageName: node
   linkType: hard
 
+"peggy@npm:^5.1.0":
+  version: 5.1.0
+  resolution: "peggy@npm:5.1.0"
+  dependencies:
+    "@peggyjs/from-mem": "npm:3.1.3"
+    commander: "npm:^14.0.3"
+    source-map-generator: "npm:2.0.6"
+  bin:
+    peggy: bin/peggy.js
+  checksum: 10c0/319aaf433289854d3080f9e4ee84b528c72d71eb53bb886c7e96cae21f06f729bfa58324eb264a068a578bfcdf8ff54528dbafedbd9e03b4951ae76836a84b12
+  languageName: node
+  linkType: hard
+
 "pidtree@npm:^0.3.0":
   version: 0.3.1
   resolution: "pidtree@npm:0.3.1"
@@ -1976,9 +2005,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"prettier-plugin-angelscript@portal:../prettier-angelscript::locator=unreal-angelscript-language-server%40workspace%3Alanguage-server":
+"prettier-plugin-angelscript@portal:../prettier-angelscript::locator=ue-angelscript-ls%40workspace%3Alanguage-server":
   version: 0.0.0-use.local
-  resolution: "prettier-plugin-angelscript@portal:../prettier-angelscript::locator=unreal-angelscript-language-server%40workspace%3Alanguage-server"
+  resolution: "prettier-plugin-angelscript@portal:../prettier-angelscript::locator=ue-angelscript-ls%40workspace%3Alanguage-server"
   peerDependencies:
     prettier: ^3.0.0
   languageName: node
@@ -2221,6 +2250,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"semver@npm:7.7.4":
+  version: 7.7.4
+  resolution: "semver@npm:7.7.4"
+  bin:
+    semver: bin/semver.js
+  checksum: 10c0/5215ad0234e2845d4ea5bb9d836d42b03499546ddafb12075566899fc617f68794bb6f146076b6881d755de17d6c6cc73372555879ec7dce2c2feee947866ad2
+  languageName: node
+  linkType: hard
+
 "semver@npm:^7.3.7":
   version: 7.8.0
   resolution: "semver@npm:7.8.0"
@@ -2396,6 +2434,13 @@ __metadata:
     side-channel-map: "npm:^1.0.1"
     side-channel-weakmap: "npm:^1.0.2"
   checksum: 10c0/cb20dad41eb032e6c24c0982e1e5a24963a28aa6122b4f05b3f3d6bf8ae7fd5474ef382c8f54a6a3ab86e0cac4d41a23bd64ede3970e5bfb50326ba02a7996e6
+  languageName: node
+  linkType: hard
+
+"source-map-generator@npm:2.0.6":
+  version: 2.0.6
+  resolution: "source-map-generator@npm:2.0.6"
+  checksum: 10c0/e3f8aa81546169125d8394a817818eeaa69a989fdb4b1a906afb629e73c13db18906c4fff68fd1ea3921b1c066458b0c1176491afd9fb43eb0b54538bd3a09e2
   languageName: node
   linkType: hard
 
@@ -2630,6 +2675,27 @@ __metadata:
   languageName: node
   linkType: hard
 
+"ue-angelscript-ls@workspace:language-server":
+  version: 0.0.0-use.local
+  resolution: "ue-angelscript-ls@workspace:language-server"
+  dependencies:
+    "@types/glob": "npm:^7.1.3"
+    "@types/vscode": "npm:^1.65.0"
+    esbuild: "npm:^0.27.3"
+    glob: "npm:^7.1.3"
+    moo: "npm:^0.5.1"
+    prettier: "npm:^3.6.2"
+    prettier-plugin-angelscript: "portal:../prettier-angelscript"
+    typescript: "npm:^4.5.5"
+    vscode-languageserver: "npm:^8.1.0"
+    vscode-languageserver-textdocument: "npm:^1.0.8"
+    vscode-test: "npm:^1.3.0"
+    vscode-uri: "npm:^3.0.3"
+  bin:
+    ue-angelscript-ls: dist/server.js
+  languageName: unknown
+  linkType: soft
+
 "unbox-primitive@npm:^1.1.0":
   version: 1.1.0
   resolution: "unbox-primitive@npm:1.1.0"
@@ -2678,30 +2744,12 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"unreal-angelscript-language-server@workspace:language-server":
-  version: 0.0.0-use.local
-  resolution: "unreal-angelscript-language-server@workspace:language-server"
-  dependencies:
-    "@types/glob": "npm:^7.1.3"
-    "@types/vscode": "npm:^1.65.0"
-    esbuild: "npm:^0.27.3"
-    glob: "npm:^7.1.3"
-    moo: "npm:^0.5.1"
-    prettier: "npm:^3.6.2"
-    prettier-plugin-angelscript: "portal:../prettier-angelscript"
-    typescript: "npm:^4.5.5"
-    vscode-languageserver: "npm:^8.1.0"
-    vscode-languageserver-textdocument: "npm:^1.0.8"
-    vscode-test: "npm:^1.3.0"
-    vscode-uri: "npm:^3.0.3"
-  languageName: unknown
-  linkType: soft
-
 "unreal-angelscript@workspace:.":
   version: 0.0.0-use.local
   resolution: "unreal-angelscript@workspace:."
   dependencies:
     npm-run-all: "npm:^4.1.5"
+    peggy: "npm:^5.1.0"
   languageName: unknown
   linkType: soft
 

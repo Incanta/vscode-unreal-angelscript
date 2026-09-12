@@ -49,16 +49,6 @@ similar to double clicking a C++ class or function in blueprints.
 This uses the standard unreal source navigation system, which is only
 implemented for classes and functions.
 
-### Add Import To
-The 'Add Import To' (default shortcut: Shift+Alt+I) command from the
-right click menu will try to automatically add an import statement
-to the top of the file to import the type that the command was run on.
-
-### Quick Open Import
-The 'Quick Open Import' (default shortcut: Ctrl+E or Ctrl+P) command from the
-right click menu will try to open the quick open navigation with the import
-statement.
-
 ### More Language Features
 This extension acts as a full language server for angelscript code. This includes
 semantic highlighting, signature help, reference search, rename symbol and a number
@@ -122,12 +112,6 @@ For example, to add extra colors to the default vscode dark theme:
 					"scope": "entity.name.function.angelscript",
 					"settings": {
 						"foreground": "#b99cfe"
-					}
-				},
-				{
-					"scope": "invalid.unimported.angelscript",
-					"settings": {
-						"foreground": "#ff9000"
 					}
 				},
 			]

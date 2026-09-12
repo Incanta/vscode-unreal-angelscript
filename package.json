@@ -2,7 +2,7 @@
     "name": "unreal-angelscript",
     "displayName": "Unreal Angelscript",
     "description": "Language Server and Debug Adapter for use with the UnrealEngine-Angelscript plugin from https://github.com/Hazelight/UnrealEngine-Angelscript",
-    "version": "1.9.3-incanta.1",
+    "version": "1.9.4-incanta.0",
     "publisher": "Hazelight",
     "private": true,
     "packageManager": "yarn@4.5.0",
@@ -690,16 +690,6 @@
                 "command": "angelscript.goToSymbol",
                 "key": "alt+g",
                 "when": "editorTextFocus"
-            },
-            {
-                "command": "angelscript.addImportTo",
-                "key": "alt+shift+i",
-                "when": "editorTextFocus"
-            },
-            {
-                "command": "angelscript.quickOpenImport",
-                "key": "alt+e",
-                "when": "editorTextFocus"
             }
         ],
         "semanticTokenScopes": [
@@ -786,6 +776,7 @@
         "pegjs:test": "cd language-server/pegjs && peggy angelscript.pegjs --allowed-start-rules start,start_global,start_class,start_enum --trace --test-file test.as -S start"
     },
     "devDependencies": {
-        "npm-run-all": "^4.1.5"
+        "npm-run-all": "^4.1.5",
+        "peggy": "^5.1.0"
     }
 }

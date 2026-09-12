@@ -2284,7 +2284,7 @@ export function LookupType(namespace : DBNamespace, typename : string) : DBType 
             if (!inst)
                 return null;
 
-            AddTypeToDatabase(namespace, inst);
+            AddTypeToDatabase(dbbasetype.namespace, inst);
             return inst;
         }
     }

@@ -21,7 +21,7 @@ import {
     TypeHierarchySupertypesParams, TypeHierarchySubtypesParams,
     WorkspaceSymbol, DocumentSymbol,
     InlayHint, InlayHintParams,
-    InlineValue, InlineValueParams,
+    InlineValue, InlineValueParams, WorkspaceFolder,
     NotificationType0,
     DocumentFormattingParams,
 } from 'vscode-languageserver/node';
@@ -59,8 +59,14 @@ import {
     buildDisconnect, buildOpenAssets, buildCreateBlueprint
 } from './unreal-buffers';
 
-// Create a connection for the server. The connection uses Node's IPC as a transport
-let connection: Connection = createConnection(new IPCMessageReader(process), new IPCMessageWriter(process));
+// Create a connection for the server.
+//
+// If we have a Node IPC send function available, use that, otherwise use stdio
+// to be used as a standalone lsp client.
+const ipcSendAvailble = typeof process.send === 'function';
+let connection: Connection = ipcSendAvailble
+    ? createConnection(new IPCMessageReader(process), new IPCMessageWriter(process))
+    : createConnection(process.stdin, process.stdout);
 
 // Create a connection to unreal
 let unreal : Socket;
@@ -272,7 +278,7 @@ function connect_unreal()
                 let version = msg.readInt();
 
                 let scriptSettings = scriptfiles.GetScriptSettings()
-                scriptSettings.automaticImports = msg.readBool();
+                /* automaticImports = */ msg.readBool(); // Unused, non-automatic imports are no longer supported
 
                 if (version >= 2)
                     scriptSettings.floatIsFloat64 = msg.readBool();
@@ -382,6 +388,11 @@ connect_unreal();
 let shouldSendDiagnosticRelatedInformation: boolean = false;
 let RootUris : string[] = [];
 
+// These should all be optional extras, i.e. the server should still function normally if it's undefined.
+type InitializationOptions = {
+    additionalScriptRootFolders?: WorkspaceFolder[]
+} | undefined;
+
 // After the server has started the client sends an initialize request. The server receives
 // in the passed params the rootPath of the workspace plus the client capabilities.
 connection.onInitialize((_params): InitializeResult => {
@@ -399,6 +410,18 @@ connection.onInitialize((_params): InitializeResult => {
         }
     }
 
+    const initializationOptions = _params.initializationOptions as InitializationOptions;
+
+    const additionalFolders = initializationOptions?.additionalScriptRootFolders;
+    if (additionalFolders) {
+        for (let scriptRootPath of additionalFolders) {
+            let uri = decodeURIComponent(scriptRootPath.uri);
+            if (!RootUris.includes(uri)) {
+                Roots.push(URI.parse(scriptRootPath.uri).fsPath);
+                RootUris.push(uri);
+            }
+        }
+    }
 
     connection.console.log("Workspace roots: " + Roots);
 
@@ -757,10 +780,10 @@ function GetAndParseModule(uri : string) : scriptfiles.ASModule
     if (!asmodule)
         return null;
 
-    scriptfiles.ParseModuleAndDependencies(asmodule);
+    scriptfiles.LoadAndParseModule(asmodule);
     if (CanResolveModules())
     {
-        scriptfiles.PostProcessModuleTypesAndDependencies(asmodule);
+        scriptfiles.PostProcessModuleTypes(asmodule);
         scriptfiles.ResolveModule(asmodule);
     }
     return asmodule;
@@ -938,8 +961,8 @@ connection.onCodeLens(function (params : CodeLensParams) : CodeLens[]
     if (!asmodule)
         return null;
 
-    scriptfiles.ParseModuleAndDependencies(asmodule);
-    scriptfiles.PostProcessModuleTypesAndDependencies(asmodule);
+    scriptfiles.LoadAndParseModule(asmodule);
+    scriptfiles.PostProcessModuleTypes(asmodule);
     scriptfiles.ResolveModule(asmodule);
     return scriptlenses.ComputeCodeLenses(asmodule);
 })
@@ -1094,8 +1117,8 @@ function TryResolveSymbols(asmodule : scriptfiles.ASModule) : SemanticTokens | n
     {
         if (!asmodule)
             return null;
-        scriptfiles.ParseModuleAndDependencies(asmodule);
-        scriptfiles.PostProcessModuleTypesAndDependencies(asmodule);
+        scriptfiles.LoadAndParseModule(asmodule);
+        scriptfiles.PostProcessModuleTypes(asmodule);
         scriptfiles.ResolveModule(asmodule);
         return scriptsemantics.HighlightSymbols(asmodule);
     }
@@ -1131,8 +1154,8 @@ connection.languages.semanticTokens.onDelta(function (params : SemanticTokensDel
         return WaitForResolveSymbols(params);
 
     let asmodule = scriptfiles.GetModuleByUri(params.textDocument.uri);
-    scriptfiles.ParseModuleAndDependencies(asmodule);
-    scriptfiles.PostProcessModuleTypesAndDependencies(asmodule);
+    scriptfiles.LoadAndParseModule(asmodule);
+    scriptfiles.PostProcessModuleTypes(asmodule);
     scriptfiles.ResolveModule(asmodule);
     let delta = scriptsemantics.HighlightSymbolsDelta(asmodule, params.previousResultId);
     return delta;
@@ -1180,52 +1203,6 @@ function getModuleName(uri : string) : string
 
     return modulename;
 }
-
-connection.onRequest("angelscript/getModuleForSymbol", (...params: any[]) : string => {
-    let pos : TextDocumentPositionParams = params[0];
-    let asmodule = GetAndParseModule(pos.textDocument.uri);
-    if (!asmodule)
-        return null;
-    if (!asmodule.resolved)
-        return null;
-
-    // When automatic imports are on we never return the symbol at all
-    if (scriptfiles.GetScriptSettings().automaticImports)
-        return "-";
-
-    // See if we can find an unimported symbol on this line first
-    let unimportedSymbol = scriptsymbols.FindUnimportedSymbolOnLine(asmodule, pos.position);
-    if (unimportedSymbol)
-    {
-        let symbolDefs = scriptsymbols.GetSymbolDefinition(asmodule, unimportedSymbol);
-        if (symbolDefs)
-        {
-            for (let def of symbolDefs)
-            {
-                if (def.module.modulename == asmodule.modulename)
-                    continue;
-                return def.module.modulename;
-            }
-        }
-    }
-
-    // Fall back to grabbing it by definition
-    let definitions = scriptsymbols.GetDefinition(asmodule, pos.position);
-    if (definitions == null)
-    {
-        connection.console.log(`Definition not found`);
-        return "";
-    }
-    {
-        let defArray = definitions as Location[];
-        let moduleName = getModuleName(defArray[0].uri);
-
-        // Don't add an import to the module we're in
-        if (moduleName == asmodule.modulename)
-            return "-";
-        return moduleName;
-    }
-});
 
 connection.onRequest("angelscript/getAPI", (root : string) : any => {
     if (typedb.HasTypesFromUnreal())
@@ -1290,10 +1267,10 @@ function TriggerThrottledModuleParse(asmodule : scriptfiles.ASModule)
     {
         // We don't parse because of didChange more than ten times per second,
         // so we don't end up with a giant backlog of parses.
-        scriptfiles.ParseModuleAndDependencies(asmodule);
+        scriptfiles.LoadAndParseModule(asmodule);
         if (CanResolveModules() && ParseQueue.length == 0 && LoadQueue.length == 0)
         {
-            scriptfiles.PostProcessModuleTypesAndDependencies(asmodule);
+            scriptfiles.PostProcessModuleTypes(asmodule);
             scriptfiles.ResolveModule(asmodule);
             scriptdiagnostics.UpdateScriptModuleDiagnostics(asmodule);
         }
@@ -1356,10 +1333,10 @@ connection.onDidOpenTextDocument(function (params : DidOpenTextDocumentParams)
     let asmodule = scriptfiles.GetOrCreateModule(modulename, getPathName(uri), uri);
     asmodule.isOpened = true;
     scriptfiles.UpdateModuleFromContent(asmodule, params.textDocument.text);
-    scriptfiles.ParseModuleAndDependencies(asmodule);
+    scriptfiles.LoadAndParseModule(asmodule);
     if (CanResolveModules() && ParseQueue.length == 0 && LoadQueue.length == 0)
     {
-        scriptfiles.PostProcessModuleTypesAndDependencies(asmodule);
+        scriptfiles.PostProcessModuleTypes(asmodule);
         scriptfiles.ResolveModule(asmodule);
         scriptdiagnostics.UpdateScriptModuleDiagnostics(asmodule);
     }
@@ -1463,8 +1440,8 @@ function TryResolveInlayHints(asmodule : scriptfiles.ASModule, range : Range) : 
     {
         if (!asmodule)
             return null;
-        scriptfiles.ParseModuleAndDependencies(asmodule);
-        scriptfiles.PostProcessModuleTypesAndDependencies(asmodule);
+        scriptfiles.LoadAndParseModule(asmodule);
+        scriptfiles.PostProcessModuleTypes(asmodule);
         scriptfiles.ResolveModule(asmodule);
         return inlayhints.GetInlayHintsForRange(asmodule, range);
     }

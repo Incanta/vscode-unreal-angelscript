@@ -1,15 +1,16 @@
 {
-    "name": "unreal-angelscript-language-server",
-    "private": true,
-    "description": "Language server for the Unreal AngelScript VS Code extension.",
-    "version": "1.0.0",
+    "name": "ue-angelscript-ls",
+    "description": "",
+    "version": "0.1.0",
+    "bin": "dist/server.js",
+    "author": "Hazelight",
     "license": "MIT",
     "engines": {
         "node": "*"
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/Microsoft/vscode-extension-samples"
+        "url": "https://github.com/Hazelight/vscode-unreal-angelscript"
     },
     "dependencies": {
         "@types/glob": "^7.1.3",
@@ -26,5 +27,9 @@
         "@types/vscode": "^1.65.0",
         "typescript": "^4.5.5",
         "vscode-test": "^1.3.0"
+    },
+    "scripts": {
+        "build": "node esbuild.js",
+        "prepare": "npm run build"
     }
 }

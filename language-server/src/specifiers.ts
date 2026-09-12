@@ -73,6 +73,7 @@ export let ASPropertySubSpecifiers : any = {
         "Units": "Determine the unit of this property's numeric value for the UI",
         "Delta": "How large is one value step in the UI for the numeric value of this property",
         "ShowOnlyInnerProperties": "Show this property's inner properties as if they are parent-level properties",
+        "ArraySizeEnum": "Specify an enum to use for an array's element index label",
     },
     "replicationcondition": {
         "InitialOnly": "This property will only attempt to send on the initial bunch",
@@ -92,6 +93,7 @@ export let ASPropertySubSpecifiers : any = {
 };
 
 export let ASClassSpecifiers : any = {
+    "Placeable": "Class can be placed in the level or on an actor by the editor",
     "NotPlaceable": "Class cannot be placed in the level or on an actor by the editor",
     "NotBlueprintable": "Blueprints cannot be choose this as a parent class",
     "Blueprintable": "Blueprints can be created with this as a parent class",
