@@ -1,9 +1,32 @@
-.vscode/**
-.vscode-test/**
-.gitignore
-vsc-extension-quickstart.md
-extension/node_modules/**
-extension/out/**
-language-server/node_modules/**
-language-server/out/**
-node_modules/**
+# Everything in this repo is bundled by esbuild into a handful of files
+# (see */esbuild.js), so the VSIX ships an allowlist: exclude everything,
+# then add back only what is loaded at runtime.
+#
+# Verify after changing this file with:  yarn vsce ls --tree --no-dependencies
+**
+
+# Extension host entry point + the debug adapter launched via
+# contributes.debuggers[].program.
+!extension/dist/extension.js
+!extension/dist/debugAdapter.js
+
+# Static language contributions.
+!extension/language-configuration.json
+!extension/syntaxes/**
+
+# Language server, spawned by extension.ts via asAbsolutePath().
+# prettier + prettier-plugin-angelscript are bundled inside this file, so the
+# prettier-angelscript/ source tree does not ship.
+!language-server/dist/server.js
+
+# Standalone MCP server. Not loaded by the extension; users point their MCP
+# client at it inside the installed extension directory.
+!mcp-server/dist/index.js
+
+# Icons: extension icon, file icon theme, debug toolbar.
+!resources/**
+
+# Marketplace metadata (vsce also forces these in, listed for clarity).
+!package.json
+!README.md
+!LICENSE

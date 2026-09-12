@@ -591,7 +591,7 @@
             {
                 "type": "angelscript",
                 "label": "Angelscript Debug",
-                "program": "./extension/out/debugAdapter.js",
+                "program": "./extension/dist/debugAdapter.js",
                 "runtime": "node",
                 "languages": [
                     "angelscript"
@@ -761,12 +761,17 @@
         ]
     },
     "scripts": {
-        "vscode:prepublish": "yarn run compile",
+        "vscode:prepublish": "yarn run compile:production",
         "compile": "yarn run compile:prettier-plugin && yarn run compile:extension && yarn run compile:language-server && yarn run compile:mcp-server",
         "compile:prettier-plugin": "cd prettier-angelscript && yarn install && yarn build",
         "compile:extension": "cd extension && node esbuild.js",
         "compile:language-server": "cd language-server && node esbuild.js",
         "compile:mcp-server": "cd mcp-server && node esbuild.js",
+        "compile:production": "yarn run compile:prettier-plugin && yarn run compile:extension:production && yarn run compile:language-server:production && yarn run compile:mcp-server:production",
+        "compile:extension:production": "cd extension && node esbuild.js --production",
+        "compile:language-server:production": "cd language-server && node esbuild.js --production",
+        "compile:mcp-server:production": "cd mcp-server && node esbuild.js --production",
+        "package": "vsce package --no-dependencies",
         "watch": "npm-run-all -p watch:*",
         "watch:extension": "cd extension && node esbuild.js --watch",
         "watch:language-server": "cd language-server && node esbuild.js --watch",
@@ -776,6 +781,7 @@
         "pegjs:test": "cd language-server/pegjs && peggy angelscript.pegjs --allowed-start-rules start,start_global,start_class,start_enum --trace --test-file test.as -S start"
     },
     "devDependencies": {
+        "@vscode/vsce": "^3.9.1",
         "npm-run-all": "^4.1.5",
         "peggy": "^5.1.0"
     }
