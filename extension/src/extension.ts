@@ -12,6 +12,7 @@ import { LanguageClient, LanguageClientOptions, ServerOptions, Definition, Trans
 import * as vscode from 'vscode';
 import { WorkspaceFolder, DebugConfiguration, ProviderResult, CancellationToken } from 'vscode';
 import { ASDebugSession } from './debug';
+import { DebuggerServer } from './debuggerServer';
 import * as Net from 'net';
 import { ClientRequest } from 'http';
 
@@ -206,6 +207,42 @@ export function activate(context: ExtensionContext) {
                 vscode.debug.activeDebugSession.customRequest("angelscript/stopPIE");
         });
     context.subscriptions.push(stopPIE);
+
+    // REST API server exposing the debugger to external (AI) agents. Off by default; the
+    // DebuggerServer is registered as a subscription so it is stopped when VS Code closes.
+    const debuggerServer = new DebuggerServer();
+    context.subscriptions.push(debuggerServer);
+
+    let startDebuggerServer = vscode.commands.registerCommand('angelscript.startDebuggerServer', async () => {
+        if (debuggerServer.running) {
+            vscode.window.showInformationMessage(`Angelscript debugger server is already running on port ${debuggerServer.port}.`);
+            return;
+        }
+        try {
+            const port = await debuggerServer.start();
+            vscode.window.showInformationMessage(`Angelscript debugger server started on http://127.0.0.1:${port}`);
+        } catch (e) {
+            vscode.window.showErrorMessage("Failed to start Angelscript debugger server: " + (e instanceof Error ? e.message : String(e)));
+        }
+    });
+    context.subscriptions.push(startDebuggerServer);
+
+    let stopDebuggerServer = vscode.commands.registerCommand('angelscript.stopDebuggerServer', async () => {
+        if (!debuggerServer.running) {
+            vscode.window.showInformationMessage("Angelscript debugger server is not running.");
+            return;
+        }
+        await debuggerServer.stop();
+        vscode.window.showInformationMessage("Angelscript debugger server stopped.");
+    });
+    context.subscriptions.push(stopDebuggerServer);
+
+    // Optionally auto-start the server on activation if configured.
+    if (vscode.workspace.getConfiguration("UnrealAngelscript").get<boolean>("debuggerServer.autoStart", false)) {
+        debuggerServer.start().catch(e => {
+            vscode.window.showErrorMessage("Failed to auto-start Angelscript debugger server: " + (e instanceof Error ? e.message : String(e)));
+        });
+    }
 
     console.log("Done activating angelscript extension");
 

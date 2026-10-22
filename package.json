@@ -518,6 +518,16 @@
                         }
                     }
                 },
+                "UnrealAngelscript.debuggerServer.port": {
+                    "type": "number",
+                    "default": 20500,
+                    "description": "Port the debugger REST API server listens on (localhost only). Used by the 'Angelscript: Start Debugger Server' command."
+                },
+                "UnrealAngelscript.debuggerServer.autoStart": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Automatically start the debugger REST API server when the extension activates. Off by default."
+                },
                 "UnrealAngelscript.completion.dependencyRestrictions": {
                     "type": "array",
                     "default": [],
@@ -668,6 +678,16 @@
                 "title": "Unreal: Resume Execution and Stop Any Active PIE Sessions",
                 "shortTitle": "Resume and Stop PIE",
                 "icon": "resources/stop_pie.png"
+            },
+            {
+                "command": "angelscript.startDebuggerServer",
+                "title": "Start Debugger Server",
+                "category": "Angelscript"
+            },
+            {
+                "command": "angelscript.stopDebuggerServer",
+                "title": "Stop Debugger Server",
+                "category": "Angelscript"
             }
         ],
         "menus": {

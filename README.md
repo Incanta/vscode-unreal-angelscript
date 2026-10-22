@@ -35,6 +35,34 @@ When the debug connection is active, any exceptions that occur during
 angelscript execution will automatically cause the editor and visual
 studio code to pause execution and show the exception.
 
+### Debugger REST API
+The extension can expose a small REST API that lets an external tool (such as
+an AI agent) inspect and control the VS Code debugger. It is **off by default**
+and binds to `localhost` only, with no authentication, so it is intended for
+local tooling.
+
+Start it with the **Angelscript: Start Debugger Server** command, and stop it
+with **Angelscript: Stop Debugger Server**. It also stops automatically when VS
+Code closes. The listen port defaults to `20500`
+(`UnrealAngelscript.debuggerServer.port`), and it can be started automatically
+on activation with `UnrealAngelscript.debuggerServer.autoStart`.
+
+Endpoints (all responses are JSON):
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| `GET` | `/` | Lists the available endpoints. |
+| `GET` | `/state` | Current debugger state and active debug sessions (including whether each is paused). |
+| `GET` | `/configurations` | Launch configurations from every workspace folder. |
+| `POST` | `/start` | Start a launch configuration. Body: `{ "name": string, "folder"?: string }`. |
+| `POST` | `/stop` | Stop debug sessions. Body: `{ "sessionId"?: string }`; omit `sessionId` to stop all. |
+
+For example, to start the `Debug Angelscript` configuration:
+
+```sh
+curl -X POST http://127.0.0.1:20500/start -d '{"name":"Debug Angelscript"}'
+```
+
 ### Go to Symbol
 The default visual studio code 'Go to Definition' (F12) is implemented for
 angelscript symbols. A separate command is added to the right click menu
